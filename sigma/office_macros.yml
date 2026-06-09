@@ -1,0 +1,20 @@
+﻿title: Office Application Macro Execution
+id: 00000001-0000-0000-0000-000000000001
+status: test
+description: Detects Office spawning PowerShell
+author: Solomon James
+tags:
+    - attack.t1566_001
+logsource:
+    product: windows
+    service: sysmon
+detection:
+    selection:
+        ParentImage|endswith:
+            - '\WINWORD.EXE'
+            - '\EXCEL.EXE'
+        Image|endswith:
+            - '\powershell.exe'
+            - '\cmd.exe'
+    condition: selection
+level: high

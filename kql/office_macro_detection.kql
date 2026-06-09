@@ -1,0 +1,1 @@
+﻿SecurityEvent | where EventID==4688 and Process has_any ("powershell.exe","cmd.exe")

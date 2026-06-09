@@ -1,0 +1,1 @@
+﻿index=main EventCode=1 ParentImage IN ("*WINWORD.EXE", "*EXCEL.EXE") Image IN ("*powershell.exe", "*cmd.exe")
