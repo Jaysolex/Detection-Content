@@ -1,17 +1,132 @@
-﻿// DETECTION: Office Macro Spawning PowerShell
-// MITRE: T1566.001 (Phishing)
-// PLATFORM: Microsoft Sentinel
+////////////////////////////////////////////////////////////////////////////////
+// DETECTION: Office Macro Spawning PowerShell - Microsoft Sentinel
+// MITRE ATT&CK: T1566.001 (Phishing - Spearphishing Attachment)
+// PLATFORM: Microsoft Sentinel / Azure Log Analytics
+// SEVERITY: 🔴 CRITICAL
+// 
+// WHAT THIS DETECTS:
+// When Microsoft Office applications (Word, Excel, PowerPoint) launch 
+// PowerShell or Command Prompt - a classic macro malware indicator.
+//
+// DATA REQUIREMENTS:
+// - SecurityEvent table (requires Windows Security Event logging)
+// - Event ID 4688 (Process Creation) must be enabled on endpoints
+// - Sysmon optional (more detailed telemetry)
+//
+// EXPECTED RUNTIME: <5 seconds
+// DATA FRESHNESS: Real-time (within 1-2 minutes of event)
+//
+// HOW TO USE IN SENTINEL:
+// 1. Go to Sentinel → Logs (analytics)
+// 2. Copy entire query below
+// 3. Paste into KQL editor
+// 4. Click "Run" to test
+// 5. If results exist: Review CommandLine field for malicious indicators
+// 6. Create Analytics Rule from this query
+// 7. Set alert threshold: > 0 events
+//
+// INTERPRETING RESULTS:
+// Each row = ONE potential macro attack event
+// Key columns to focus on:
+//   - CommandLine: What command the macro executed (MOST IMPORTANT)
+//   - Account: Which user's session was exploited
+//   - Computer: Which machine needs investigation
+//
+// ALERTS TO CREATE:
+// - Alert if CommandLine contains "IEX" (Invoke-Expression = code execution)
+// - Alert if CommandLine contains "DownloadString" (download from internet)
+// - Alert if CommandLine contains "System.Reflection" (DLL injection)
+// - Alert if User != "system" AND ParentProcess is Office (admin running macro)
+//
+// FALSE POSITIVE SCENARIOS:
+// - Legitimate Office automation by administrators
+// - Business Intelligence tools using Office API
+// - SCCM/Intune using Office for deployment scripts
+// 
+// HOW TO REDUCE FALSE POSITIVES IN SENTINEL:
+// Add this line before the final "| sort by":
+// | where Account !in ("automation_svc", "scheduler_admin", "SYSTEM")
+//
+// REMEDIATION IF TRIGGERED:
+// 1. IMMEDIATE: Disconnect computer from network
+// 2. COLLECT: Obtain Office document from email
+// 3. ANALYZE: Extract macro with oledump.py or OLEVBA
+// 4. HUNT: Search for lateral movement (RDP, SMB, PowerShell remoting)
+// 5. RESTORE: From clean backup
+// 6. HUNT CAMPAIGN: Check all users for same document
+//
+// PERFORMANCE NOTES:
+// - Searches up to 30 days of data by default
+// - For current hour only: Add "| where TimeGenerated >= ago(1h)"
+// - For specific user: Add "| where Account == 'contoso\\jsmith'"
+// - For specific computer: Add "| where Computer == 'DESKTOP-ABC'"
+//
+// RELATED DETECTIONS IN SENTINEL:
+// - PowerShell Script Block execution (Event 4104)
+// - Scheduled task creation (Event 4698)
+// - Registry Run key modification (Event 4657)
+// - Suspicious network connections (SecurityEvent + DeviceNetworkEvents)
+//
+////////////////////////////////////////////////////////////////////////////////
 
 SecurityEvent
-| where EventID == 4688
-| where ParentProcessName has_any ("WINWORD.EXE", "EXCEL.EXE", "POWERPNT.EXE")
-| where Process has_any ("powershell.exe", "cmd.exe", "cscript.exe")
-| project TimeGenerated, Computer, Account, ParentProcessName, Process, CommandLine
+| where EventID == 4688  // Process Creation event
+| where ParentProcessName has_any (
+    "WINWORD.EXE",     // Microsoft Word
+    "EXCEL.EXE",       // Microsoft Excel
+    "POWERPNT.EXE",    // Microsoft PowerPoint
+    "MSACCESS.EXE"     // Microsoft Access
+  )
+| where Process has_any (
+    "powershell.exe",   // PowerShell (most dangerous)
+    "cmd.exe",         // Command Prompt
+    "cscript.exe",     // VBScript
+    "wscript.exe"      // Windows Script Host
+  )
+| project 
+    TimeGenerated,
+    Computer,
+    Account,
+    ParentProcessName,
+    Process,
+    CommandLine,
+    ProcessId,
+    ParentProcessId
 | extend Severity = case(
-    CommandLine has_any ("IEX", "DownloadString"), "CRITICAL",
-    Process == "powershell.exe", "HIGH",
+    CommandLine has_any ("IEX", "DownloadString", "System.Reflection", "InvokeWebRequest"), "CRITICAL",
+    CommandLine has "powershell", "HIGH",
+    CommandLine has "cmd", "HIGH",
     "MEDIUM"
   )
+| extend ThreatLevel = case(
+    Severity == "CRITICAL", "⛔ BLOCK & ISOLATE IMMEDIATELY",
+    Severity == "HIGH", "⚠️ Investigate within 30 minutes",
+    "ℹ️ Monitor"
+  )
+| extend InvestigationSteps = case(
+    Severity == "CRITICAL", "1) Isolate computer 2) Collect document 3) Analyze macro 4) Hunt network activity 5) Check other users",
+    Severity == "HIGH", "1) Review CommandLine 2) Check computer logs 3) Monitor for lateral movement",
+    "1) Monitor for suspicious activity"
+  )
+| sort by TimeGenerated desc
 
-// WHAT THIS DETECTS: Word/Excel opening PowerShell
-// ACTION: Isolate computer immediately
+////////////////////////////////////////////////////////////////////////////////
+// ANALYTICAL RULE RECOMMENDATIONS:
+// 
+// RULE NAME: Office Macro Execution Detected
+// QUERY: [Above query]
+// FREQUENCY: Every 5 minutes
+// ALERT THRESHOLD: 1 or more events
+// SEVERITY: High
+// TACTICS: Initial Access, Execution
+// TECHNIQUES: T1566.001, T1204.002
+// RESPONDERS: SOC Team, Incident Response
+//
+// AUTO-RESPONSE ACTIONS:
+// 1. Create incident
+// 2. Send alert to SOC on-call
+// 3. Tag with "macro-attack"
+// 4. Enrich with threat intelligence
+//
+////////////////////////////////////////////////////////////////////////////////
+

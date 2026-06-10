@@ -1,20 +1,70 @@
-﻿title: Office Application Macro Execution
+title: Office Application Macro Execution Detection
 id: 00000001-0000-0000-0000-000000000001
-status: test
-description: Detects Office spawning PowerShell
+status: production
+description: |
+  Detects when Microsoft Office applications (Word, Excel, PowerPoint, Access) spawn command-line interpreters (PowerShell, CMD, VBScript, Batch).
+  
+  This is a PRIMARY INDICATOR of macro-based malware execution.
+  
+  Attacker Goal: User receives phishing email → Opens Office document → Macro auto-executes → Spawns PowerShell to download/execute malware.
+  
+  This detection catches the moment BEFORE malware downloads, giving SOC time to respond.
+
+references:
+    - https://attack.mitre.org/techniques/T1566/001/
+    - https://attack.mitre.org/techniques/T1204/002/
+    - https://elastic.co/security-labs/office-macro-abuse
+
 author: Solomon James
+date: 2026/06/10
+modified: 2026/06/10
+
 tags:
+    - attack.initial_access
     - attack.t1566_001
+    - attack.t1204_002
+    - detection.evasion
+    - malware.office
+
 logsource:
     product: windows
     service: sysmon
+    definition: 'Sysmon Event ID 1 (Process Creation) must be enabled. Enable with: sysmon -i -accepteula'
+
 detection:
-    selection:
+    selection_parent:
         ParentImage|endswith:
-            - '\WINWORD.EXE'
-            - '\EXCEL.EXE'
+            - '\WINWORD.EXE'      # Microsoft Word
+            - '\EXCEL.EXE'        # Microsoft Excel
+            - '\POWERPNT.EXE'     # Microsoft PowerPoint
+            - '\MSACCESS.EXE'     # Microsoft Access
+    
+    selection_child:
         Image|endswith:
-            - '\powershell.exe'
-            - '\cmd.exe'
-    condition: selection
+            - '\powershell.exe'   # PowerShell (most common for payload delivery)
+            - '\cmd.exe'          # Command Prompt
+            - '\cscript.exe'      # VBScript interpreter
+            - '\wscript.exe'      # Windows Script Host
+    
+    condition: selection_parent and selection_child
+
+falsepositives:
+    - Legitimate Office automation scripts (RPA, reporting tools)
+    - Business Intelligence tools (Tableau, Power BI) using Office automation
+    - System administrators running Office macros for maintenance
+    - Enterprise software installers that use Office for configuration
+    - Legitimate SCCM/ConfigMgr deployments using Office scripts
+
 level: high
+
+fields:
+    - ComputerName
+    - User
+    - ParentImage
+    - Image
+    - CommandLine
+    - ProcessId
+    - ParentProcessId
+
+query_hint: 'Search for: ParentImage contains (WINWORD|EXCEL|POWERPNT|MSACCESS) AND Image contains (powershell|cmd|cscript|wscript)'
+
