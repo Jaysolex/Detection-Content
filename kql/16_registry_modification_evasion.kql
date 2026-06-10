@@ -1,0 +1,5 @@
+DeviceRegistryEvents
+| where RegistryKey contains_cs "DisableRealtimeMonitoring" or RegistryKey contains_cs "DisableAntiSpyware" or RegistryKey contains_cs "DisableFirewall" or RegistryKey contains_cs "DisableWindowsDefender" or RegistryKey contains_cs "Run" or RegistryKey contains_cs "Services"
+| where InitiatingProcessFileName in ("cmd.exe", "powershell.exe", "reg.exe")
+| where AccountName != "SYSTEM"
+| project TimeGenerated, DeviceName, AccountName, RegistryKey, InitiatingProcessFileName

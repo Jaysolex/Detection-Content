@@ -1,0 +1,30 @@
+title: HTTP Beaconing to Suspicious Domains
+id: http-001
+description: Detects HTTP requests to known C2 domains or suspicious patterns
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: http
+  definition: HTTP proxy/firewall logs
+
+detection:
+  keywords:
+    - 'URL contains /api/cmd'
+    - 'URL contains /beacon'
+    - 'URL contains /c2'
+    - 'User-Agent contains bot'
+    - 'User-Agent contains crawler'
+  
+  suspicious_domains:
+    - 'Host contains -c2-'
+    - 'Host contains .ru'
+    - 'Host contains .cn'
+  
+  condition: keywords or suspicious_domains
+
+level: high
+tags:
+  - attack.command_and_control
+  - attack.t1071.001

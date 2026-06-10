@@ -1,0 +1,5 @@
+DeviceEvents
+| where ActionType == "CreateRemoteThreadApiCall"
+| where InitiatingProcessFileName in ("explorer.exe", "svchost.exe", "winlogon.exe")
+| where (FileName == "cmd.exe" or FileName == "powershell.exe" or FileName == "rundll32.exe")
+| project TimeGenerated, DeviceName, InitiatingProcessFileName, FileName

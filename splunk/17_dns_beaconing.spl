@@ -1,0 +1,3 @@
+source="DNS" (QueryName="*dga-*" OR QueryName="*.tk" OR QueryName="*.ml" OR QueryName="*.ga" OR QueryName="*.cf") OR (query_count > 100) OR (failed_query_count > 50)
+| stats count, values(src_ip) as client, values(QueryName) as domain by host
+| where count > 10

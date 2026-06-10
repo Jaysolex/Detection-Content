@@ -1,0 +1,6 @@
+DeviceFileEvents
+| where ActionType == "FileModifiedTime"
+| where (FileName endswith ".exe" or FileName endswith ".dll" or FileName endswith ".sys")
+| where InitiatingProcessFileName in ("cmd.exe", "powershell.exe", "python.exe")
+| where AccountName != "SYSTEM"
+| project TimeGenerated, DeviceName, AccountName, FileName, InitiatingProcessFileName

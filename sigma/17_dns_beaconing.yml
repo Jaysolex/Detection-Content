@@ -1,0 +1,29 @@
+title: DNS Beaconing Detection
+id: dns-001
+description: Detects DNS queries indicating command-and-control beacon activity
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: dns
+  definition: DNS query logs
+
+detection:
+  keywords:
+    - 'QueryName contains dga-'
+    - 'QueryName contains .tk'
+    - 'QueryName contains .ml'
+    - 'QueryName contains .ga'
+    - 'QueryName contains .cf'
+  
+  suspicious:
+    - 'QueryCount > 100'
+    - 'Failed queries > 50'
+  
+  condition: keywords or suspicious
+
+level: high
+tags:
+  - attack.command_and_control
+  - attack.t1071.004

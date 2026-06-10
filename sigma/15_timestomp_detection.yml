@@ -1,0 +1,32 @@
+title: File Timestamp Modification (Timestomp)
+id: time-001
+description: Detects file timestamp modifications attempting to hide malware execution timeline
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: sysmon
+  definition: Event ID 2 - A process changed a file creation time
+
+detection:
+  keywords:
+    - 'EventType equals SetCreationTime'
+    - 'TargetFilename contains .exe'
+    - 'TargetFilename contains .dll'
+    - 'TargetFilename contains .sys'
+  
+  suspicious:
+    - 'Image contains cmd.exe'
+    - 'Image contains powershell.exe'
+    - 'Image contains python.exe'
+  
+  filter:
+    User|equals: 'SYSTEM'
+  
+  condition: keywords and suspicious and not filter
+
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.t1070.006

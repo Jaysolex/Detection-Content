@@ -1,0 +1,38 @@
+title: Living-off-the-Land Binaries (LOLBins) Execution
+id: lolbin-001
+description: Detects execution of common LOLBins used for defense evasion and code execution
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: sysmon
+  definition: Event ID 1 - Process Creation
+
+detection:
+  keywords:
+    - 'certutil.exe'
+    - 'msiexec.exe'
+    - 'regsvcs.exe'
+    - 'regasm.exe'
+    - 'mshta.exe'
+    - 'rundll32.exe'
+    - 'cscript.exe'
+    - 'wscript.exe'
+  
+  suspicious:
+    - 'CommandLine contains -decode'
+    - 'CommandLine contains -urlcache'
+    - 'CommandLine contains javascript:'
+    - 'CommandLine contains http'
+    - 'CommandLine contains .vbs'
+  
+  filter:
+    User|equals: 'SYSTEM'
+  
+  condition: keywords and suspicious and not filter
+
+level: medium
+tags:
+  - attack.defense_evasion
+  - attack.t1218

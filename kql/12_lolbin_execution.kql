@@ -1,0 +1,5 @@
+DeviceProcessEvents
+| where FileName in ("certutil.exe", "msiexec.exe", "regsvcs.exe", "regasm.exe", "mshta.exe", "rundll32.exe", "cscript.exe", "wscript.exe")
+| where ProcessCommandLine contains "-decode" or ProcessCommandLine contains "-urlcache" or ProcessCommandLine contains "javascript:" or ProcessCommandLine contains "http" or ProcessCommandLine contains ".vbs"
+| where AccountName != "SYSTEM"
+| project TimeGenerated, DeviceName, AccountName, FileName, ProcessCommandLine

@@ -1,0 +1,27 @@
+title: Domain Generation Algorithm (DGA) Detection
+id: dga-001
+description: Detects DNS queries to algorithmically generated domains
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: dns
+  definition: DNS query logs
+
+detection:
+  keywords:
+    - 'QueryName entropy > 4.5'
+    - 'QueryName length > 20'
+    - 'QueryCount per domain > 50'
+  
+  suspicious:
+    - 'QueryName contains numbers'
+    - 'QueryName no vowels'
+  
+  condition: keywords or suspicious
+
+level: high
+tags:
+  - attack.command_and_control
+  - attack.t1568

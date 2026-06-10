@@ -1,0 +1,5 @@
+DeviceNetworkEvents
+| where RemotePort !in (80, 443, 53) and RemotePort > 10000
+| where InitiatingProcessFileName in ("powershell.exe", "cmd.exe", "rundll32.exe")
+| where !RemoteIPv4 matches regex @"^(10|172\.16|192\.168)\."
+| project TimeGenerated, DeviceName, RemoteIPv4, RemotePort, InitiatingProcessFileName

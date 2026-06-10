@@ -1,0 +1,6 @@
+DeviceFileEvents
+| where ActionType == "FileDeleted"
+| where (FileName endswith ".log" or FileName endswith ".txt" or FileName endswith ".exe" or FolderPath contains "Temp" or FolderPath contains "AppData")
+| where InitiatingProcessFileName in ("cmd.exe", "powershell.exe", "explorer.exe")
+| where AccountName != "SYSTEM"
+| project TimeGenerated, DeviceName, AccountName, FileName, InitiatingProcessFileName

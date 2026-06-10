@@ -1,0 +1,3 @@
+source="WinEventLog:Sysmon" EventCode=2 (TargetFilename="*.exe" OR TargetFilename="*.dll" OR TargetFilename="*.sys") (Image="*cmd.exe" OR Image="*powershell.exe" OR Image="*python.exe") NOT User="SYSTEM"
+| stats count by ComputerName, User, TargetFilename
+| where count > 0

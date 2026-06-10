@@ -1,0 +1,4 @@
+source="DNS" (query_entropy > 4.5 OR length(QueryName) > 20) 
+| stats count as query_count by QueryName
+| where query_count > 50
+| where isnull(known_domain)

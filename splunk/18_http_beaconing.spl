@@ -1,0 +1,3 @@
+source="HTTP" (url="*/api/cmd*" OR url="*/beacon*" OR url="*/c2*" OR user_agent="*bot*" OR user_agent="*crawler*" OR host="*-c2-*" OR host="*.ru" OR host="*.cn")
+| stats count, values(src_ip) as client by host, url
+| where count > 5

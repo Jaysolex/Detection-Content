@@ -1,0 +1,3 @@
+source="WinEventLog:Sysmon" EventCode=3 (NOT DestinationPort IN (80,443,53) AND DestinationPort > 10000) (Image="*powershell.exe" OR Image="*cmd.exe" OR Image="*rundll32.exe") NOT (DestinationIp LIKE "10.%" OR DestinationIp LIKE "172.16.%" OR DestinationIp LIKE "192.168.%")
+| stats count by ComputerName, DestinationIp, DestinationPort
+| where count > 0

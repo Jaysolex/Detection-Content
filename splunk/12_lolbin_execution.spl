@@ -1,0 +1,3 @@
+source="WinEventLog:Sysmon" EventCode=1 (Image="*certutil.exe" OR Image="*msiexec.exe" OR Image="*regsvcs.exe" OR Image="*regasm.exe" OR Image="*mshta.exe" OR Image="*rundll32.exe" OR Image="*cscript.exe" OR Image="*wscript.exe") (CommandLine="*-decode*" OR CommandLine="*-urlcache*" OR CommandLine="*javascript:*" OR CommandLine="*http*" OR CommandLine="*.vbs*") NOT User="SYSTEM"
+| stats count by ComputerName, User, Image
+| where count > 0

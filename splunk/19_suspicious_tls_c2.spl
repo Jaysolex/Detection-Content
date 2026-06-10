@@ -1,0 +1,3 @@
+source="SSL" (CertIssuer="*selfsigned*" OR CertIssuer="*localhost*" OR NotValidBefore >= 2025-01-01) (dport=443)
+| stats count by src_ip, dest_ip, CertIssuer
+| where count > 1

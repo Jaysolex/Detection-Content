@@ -1,0 +1,6 @@
+DeviceNetworkEvents
+| where RemotePort == 443
+| where RemoteIPv4 matches regex @"^(10|172|192)\."
+| where Protocol == "Https"
+| summarize ConnectionCount=count() by DeviceName, RemoteIPv4
+| where ConnectionCount > 3

@@ -1,0 +1,5 @@
+DeviceNetworkEvents
+| where Protocol == "Http"
+| where RemoteUrl contains "/api/cmd" or RemoteUrl contains "/beacon" or RemoteUrl contains "/c2" or RemoteUrl contains "-c2-" or RemoteUrl endswith ".ru" or RemoteUrl endswith ".cn"
+| summarize RequestCount=count() by DeviceName, RemoteUrl, InitiatingProcessFileName
+| where RequestCount > 5

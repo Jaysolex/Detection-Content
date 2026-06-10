@@ -1,0 +1,33 @@
+title: Outbound C2 Connection Detection
+id: c2-001
+description: Detects outbound connections from suspicious processes to external IPs on non-standard ports
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: sysmon
+  definition: Event ID 3 - Network Connection
+
+detection:
+  keywords:
+    - 'DestinationPort not in 80,443,53'
+    - 'DestinationPort > 10000'
+  
+  suspicious_process:
+    - 'Image contains powershell.exe'
+    - 'Image contains cmd.exe'
+    - 'Image contains rundll32.exe'
+  
+  filter:
+    DestinationIp|startswith:
+      - '10.'
+      - '172.16.'
+      - '192.168.'
+  
+  condition: keywords and suspicious_process and not filter
+
+level: high
+tags:
+  - attack.command_and_control
+  - attack.t1071

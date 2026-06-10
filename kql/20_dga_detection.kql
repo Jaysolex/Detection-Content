@@ -1,0 +1,6 @@
+DeviceNetworkEvents
+| where Protocol == "Dns"
+| where strlen(RemoteUrl) > 20
+| summarize QueryCount=count() by RemoteUrl, DeviceName
+| where QueryCount > 50
+| join kind=leftanti (externaldata(KnownDomains:string) [@"https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/alienvault_reputation.txt"]) on RemoteUrl

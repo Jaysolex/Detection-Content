@@ -1,0 +1,27 @@
+title: Suspicious TLS/SSL Connection to C2
+id: tls-001
+description: Detects TLS/SSL connections with anomalous certificates or to known C2 servers
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: ssl
+  definition: TLS/SSL connection logs
+
+detection:
+  keywords:
+    - 'CertIssuer contains selfsigned'
+    - 'CertIssuer contains localhost'
+    - 'NotValidBefore after 2025-01-01'
+  
+  suspicious:
+    - 'Port 443'
+    - 'Destination is private IP'
+  
+  condition: keywords or suspicious
+
+level: high
+tags:
+  - attack.command_and_control
+  - attack.t1571

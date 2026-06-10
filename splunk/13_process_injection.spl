@@ -1,0 +1,3 @@
+source="WinEventLog:Sysmon" EventCode=8 (TargetObject="*CreateRemoteThread*" OR TargetObject="*VirtualAllocEx*" OR TargetObject="*WriteProcessMemory*") (SourceImage="*explorer.exe" OR SourceImage="*svchost.exe" OR SourceImage="*winlogon.exe") (TargetImage="*cmd.exe" OR TargetImage="*powershell.exe" OR TargetImage="*rundll32.exe")
+| stats count by ComputerName, SourceImage, TargetImage
+| where count > 0

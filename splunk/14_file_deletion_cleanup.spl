@@ -1,0 +1,3 @@
+source="WinEventLog:Sysmon" EventCode=23 (TargetFilename="*.log" OR TargetFilename="*.txt" OR TargetFilename="*.exe" OR TargetFilename="*Temp*" OR TargetFilename="*AppData*") (Image="*cmd.exe" OR Image="*powershell.exe" OR Image="*explorer.exe") NOT User="SYSTEM"
+| stats count by ComputerName, User, Image
+| where count > 0

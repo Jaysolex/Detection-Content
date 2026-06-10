@@ -1,0 +1,5 @@
+DeviceNetworkEvents
+| where RemoteUrl contains "dga-" or RemoteUrl endswith ".tk" or RemoteUrl endswith ".ml" or RemoteUrl endswith ".ga" or RemoteUrl endswith ".cf"
+| where Protocol == "Dns"
+| summarize QueryCount=count(), UniqueDestinations=dcount(RemoteUrl) by DeviceName, InitiatingProcessFileName
+| where QueryCount > 100 or UniqueDestinations > 50

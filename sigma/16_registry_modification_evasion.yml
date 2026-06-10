@@ -1,0 +1,34 @@
+title: Registry Modification for Evasion
+id: reg-001
+description: Detects registry modifications attempting to disable security features or hide malware
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: sysmon
+  definition: Event ID 13 - Registry Value Set
+
+detection:
+  keywords:
+    - 'TargetObject contains DisableRealtimeMonitoring'
+    - 'TargetObject contains DisableAntiSpyware'
+    - 'TargetObject contains DisableFirewall'
+    - 'TargetObject contains DisableWindowsDefender'
+    - 'TargetObject contains Run'
+    - 'TargetObject contains Services'
+  
+  suspicious:
+    - 'Image contains cmd.exe'
+    - 'Image contains powershell.exe'
+    - 'Image contains reg.exe'
+  
+  filter:
+    User|equals: 'SYSTEM'
+  
+  condition: keywords and suspicious and not filter
+
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.t1112
