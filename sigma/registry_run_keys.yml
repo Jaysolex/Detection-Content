@@ -1,0 +1,17 @@
+﻿title: Registry Run Keys Modification
+id: 00000005-0000-0000-0000-000000000005
+status: test
+description: Detects modification of registry run keys for persistence
+author: Solomon James
+tags:
+    - attack.t1547_001
+logsource:
+    product: windows
+    service: sysmon
+detection:
+    selection:
+        TargetObject|contains:
+            - '\Software\Microsoft\Windows\CurrentVersion\Run'
+            - '\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+    condition: selection
+level: high

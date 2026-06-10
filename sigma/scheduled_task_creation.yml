@@ -1,0 +1,16 @@
+﻿title: Suspicious Scheduled Task Creation
+id: 00000004-0000-0000-0000-000000000004
+status: test
+description: Detects creation of scheduled tasks with suspicious properties
+author: Solomon James
+tags:
+    - attack.t1053_005
+logsource:
+    product: windows
+    service: sysmon
+detection:
+    selection:
+        Image|endswith: '\schtasks.exe'
+        CommandLine|contains: '/create'
+    condition: selection
+level: high

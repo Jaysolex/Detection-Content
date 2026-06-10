@@ -1,0 +1,22 @@
+﻿title: Script Execution from User Folders
+id: 00000003-0000-0000-0000-000000000003
+status: test
+description: Detects script execution from Downloads, Desktop, Temp
+author: Solomon James
+tags:
+    - attack.t1059
+logsource:
+    product: windows
+    service: sysmon
+detection:
+    selection:
+        Image|endswith:
+            - '\powershell.exe'
+            - '\cscript.exe'
+            - '\wscript.exe'
+        CommandLine|contains:
+            - 'Downloads'
+            - 'Desktop'
+            - 'Temp'
+    condition: selection
+level: high

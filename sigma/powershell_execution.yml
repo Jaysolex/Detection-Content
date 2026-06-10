@@ -1,0 +1,19 @@
+﻿title: PowerShell Script Execution Detection
+id: 00000006-0000-0000-0000-000000000006
+status: test
+description: Detects PowerShell script execution via Event Log 4104
+author: Solomon James
+tags:
+    - attack.t1059_001
+logsource:
+    product: windows
+    service: powershell
+detection:
+    selection:
+        EventID: 4104
+        ScriptBlockText|contains:
+            - 'IEX'
+            - 'DownloadString'
+            - 'System.Reflection'
+    condition: selection
+level: high

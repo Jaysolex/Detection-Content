@@ -1,0 +1,16 @@
+﻿title: Suspicious LNK File Execution
+id: 00000002-0000-0000-0000-000000000002
+status: test
+description: Detects execution of LNK files from suspicious locations
+author: Solomon James
+tags:
+    - attack.t1547_009
+logsource:
+    product: windows
+    service: sysmon
+detection:
+    selection:
+        Image|endswith: '\explorer.exe'
+        CommandLine|contains: '.lnk'
+    condition: selection
+level: medium
