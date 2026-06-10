@@ -1,0 +1,17 @@
+﻿// DETECTION: Office Macro Spawning PowerShell
+// MITRE: T1566.001 (Phishing)
+// PLATFORM: Microsoft Sentinel
+
+SecurityEvent
+| where EventID == 4688
+| where ParentProcessName has_any ("WINWORD.EXE", "EXCEL.EXE", "POWERPNT.EXE")
+| where Process has_any ("powershell.exe", "cmd.exe", "cscript.exe")
+| project TimeGenerated, Computer, Account, ParentProcessName, Process, CommandLine
+| extend Severity = case(
+    CommandLine has_any ("IEX", "DownloadString"), "CRITICAL",
+    Process == "powershell.exe", "HIGH",
+    "MEDIUM"
+  )
+
+// WHAT THIS DETECTS: Word/Excel opening PowerShell
+// ACTION: Isolate computer immediately

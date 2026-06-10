@@ -1,0 +1,11 @@
+﻿// DETECTION: LNK File Execution
+// MITRE: T1547.009 (Shortcut Modification)
+
+SecurityEvent
+| where EventID == 4688
+| where Process has "explorer.exe"
+| where CommandLine has ".lnk"
+| project TimeGenerated, Computer, Account, CommandLine
+
+// WHAT THIS DETECTS: Explorer launching suspicious .LNK files
+// ACTION: Investigate file source

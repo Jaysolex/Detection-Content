@@ -1,0 +1,17 @@
+﻿# DETECTION: Script Execution from High-Risk Folders
+# MITRE: T1059 (Command and Scripting Interpreter)
+# DESCRIPTION: PowerShell/VBScript running from Downloads/Desktop/Temp
+# DATA SOURCE: Sysmon Event ID 1
+
+index=main EventCode=1
+Image IN ("*\\powershell.exe", "*\\cscript.exe", "*\\wscript.exe")
+(CommandLine="*Downloads*" OR CommandLine="*Desktop*" OR CommandLine="*Temp*" OR CommandLine="*\Temp\*")
+| stats count by ComputerName, User, Image, CommandLine
+| where count > 0
+
+# WHAT THIS DOES:
+# Finds script execution from user-writable, high-risk locations
+# These are common malware drop locations
+
+# SEVERITY: HIGH - Likely active attack
+# ACTION: Isolate host immediately

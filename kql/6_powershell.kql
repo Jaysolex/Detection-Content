@@ -1,0 +1,14 @@
+﻿// DETECTION: PowerShell Suspicious Script Execution
+// MITRE: T1059.001 (PowerShell)
+
+SecurityEvent
+| where EventID == 4104
+| where ScriptBlockText has_any ("IEX", "DownloadString", "System.Reflection", "InvokeWebRequest")
+| project TimeGenerated, Computer, Account, ScriptBlockText
+| sort by TimeGenerated desc
+
+// WHAT THIS DETECTS: PowerShell with code execution keywords
+// IEX = Invoke-Expression (execute arbitrary code)
+// DownloadString = Download from internet
+// System.Reflection = DLL injection technique
+// SEVERITY: CRITICAL - Fileless malware

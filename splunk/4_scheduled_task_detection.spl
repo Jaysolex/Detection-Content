@@ -1,0 +1,17 @@
+﻿# DETECTION: Scheduled Task Creation
+# MITRE: T1053.005 (Scheduled Task/Job)
+# DESCRIPTION: schtasks.exe creating new scheduled task (persistence)
+# DATA SOURCE: Sysmon Event ID 1
+
+index=main EventCode=1
+Image="*\\schtasks.exe"
+CommandLine="*/create*"
+| stats count by ComputerName, User, CommandLine
+| where count > 0
+
+# WHAT THIS DOES:
+# Finds schtasks.exe with /create flag
+# Indicates task creation attempt (persistence mechanism)
+
+# SEVERITY: MEDIUM-HIGH
+# ACTION: Review task details - what will it run?

@@ -1,0 +1,16 @@
+﻿# DETECTION: Suspicious LNK File Execution
+# MITRE: T1547.009 (Shortcut Modification)
+# DESCRIPTION: Detects Explorer launching .LNK shortcut files
+# DATA SOURCE: Sysmon Event ID 1 (Process Creation)
+
+index=main EventCode=1
+Image="*\\explorer.exe"
+CommandLine="*.lnk"
+| stats count by ComputerName, User, CommandLine, ParentImage
+| where count > 0
+
+# WHAT THIS DOES:
+# Finds when explorer.exe is executed with .lnk file in command line
+# This indicates user clicked a suspicious shortcut
+
+# ALERT THRESHOLD: Any result = investigate

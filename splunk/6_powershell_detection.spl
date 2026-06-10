@@ -1,0 +1,19 @@
+﻿# DETECTION: PowerShell Suspicious Script Execution
+# MITRE: T1059.001 (PowerShell)
+# DESCRIPTION: PowerShell Event ID 4104 with suspicious keywords
+# DATA SOURCE: Windows Event Log EventCode 4104
+
+index=main EventCode=4104
+(ScriptBlockText="*IEX*" OR ScriptBlockText="*DownloadString*" OR ScriptBlockText="*System.Reflection*")
+| stats count by ComputerName, User, ScriptBlockText
+| where count > 0
+| table ComputerName, User, ScriptBlockText
+
+# WHAT THIS DOES:
+# Captures PowerShell scripts containing suspicious keywords
+# IEX = Invoke-Expression (execute arbitrary code)
+# DownloadString = Download content from internet
+# System.Reflection = DLL injection technique
+
+# SEVERITY: CRITICAL
+# ACTION: Isolate immediately

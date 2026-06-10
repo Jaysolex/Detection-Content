@@ -1,0 +1,11 @@
+﻿// DETECTION: Scheduled Task Creation
+// MITRE: T1053.005 (Scheduled Task/Job)
+
+SecurityEvent
+| where EventID == 4688
+| where Process has "schtasks.exe"
+| where CommandLine has "/create"
+| project TimeGenerated, Computer, Account, CommandLine
+
+// WHAT THIS DETECTS: schtasks.exe creating new scheduled tasks
+// SEVERITY: MEDIUM-HIGH - Persistence mechanism

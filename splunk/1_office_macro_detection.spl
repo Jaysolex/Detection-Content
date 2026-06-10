@@ -1,0 +1,46 @@
+﻿# DETECTION: Office Macro Spawning PowerShell
+# MITRE: T1566.001 (Phishing - Spearphishing Attachment)
+# DESCRIPTION: Detects Word/Excel opening and launching PowerShell or CMD
+# DATA SOURCE: Sysmon Event ID 1 (Process Creation)
+# HOW TO USE: Copy this query, paste into Splunk search bar, adjust time range
+
+index=main EventCode=1 
+ParentImage IN ("*\\WINWORD.EXE", "*\\EXCEL.EXE", "*\\POWERPNT.EXE")
+Image IN ("*\\powershell.exe", "*\\cmd.exe", "*\\cscript.exe", "*\\wscript.exe")
+| stats count by ComputerName, User, ParentImage, Image, CommandLine
+| where count > 0
+| table ComputerName, User, ParentImage, Image, CommandLine
+| eval severity=case(
+    like(CommandLine, "%IEX%") OR like(CommandLine, "%DownloadString%"), "CRITICAL",
+    like(CommandLine, "%powershell%"), "HIGH",
+    1=1, "MEDIUM"
+  )
+| sort - severity
+
+# WHAT THIS DOES:
+# 1. Finds process creation events (EventCode=1)
+# 2. Looks for Office app as parent process (WINWORD, EXCEL, etc)
+# 3. Checks if child process is script interpreter (PowerShell, CMD, VBScript)
+# 4. Groups by computer/user/command for easy review
+# 5. Assigns severity based on command content
+
+# WHAT TRIGGERS THIS:
+# ✅ Word/Excel → PowerShell with suspicious commands
+# ✅ Office → CMD downloading files
+# ✅ Office → VBScript execution
+
+# WHAT DOES NOT TRIGGER:
+# ❌ Office opening normally
+# ❌ Office printing documents
+# ❌ Office saving files
+
+# FALSE POSITIVES:
+# - Legitimate Office automation by admins
+# - Business Intelligence tools (Tableau, Power BI)
+# - Legitimate reporting macros
+
+# HOW TO TUNE:
+# 1. Check User field - is this an admin account?
+# 2. Check CommandLine - does it look like automation or attack?
+# 3. Whitelist known good automation accounts
+# 4. Correlate with network activity (did process make external connections?)
