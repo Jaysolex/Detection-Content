@@ -1,0 +1,3 @@
+source="WinEventLog:Sysmon" EventCode=1 Image="*cmd.exe" (CommandLine="*cmd /c*" OR CommandLine="*&&*" OR CommandLine="*||*" OR CommandLine="*| powershell*" OR CommandLine="*certutil*" OR CommandLine="*bitsadmin*" OR CommandLine="*mshta*") NOT (User="SYSTEM" OR User="Administrator")
+| stats count by ComputerName, User, CommandLine
+| where count > 0

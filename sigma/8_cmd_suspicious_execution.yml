@@ -1,0 +1,34 @@
+title: CMD.exe with Suspicious Command Chaining
+id: cmd-001
+description: Detects cmd.exe execution with command chaining (&&, ||) or piping to PowerShell/Python
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: sysmon
+  definition: Event ID 1 - Process Creation
+
+detection:
+  keywords:
+    - 'cmd /c'
+    - 'cmd /r'
+    - '&&'
+    - '||'
+    - '| powershell'
+    - '| python'
+    - 'certutil'
+    - 'bitsadmin'
+    - 'mshta'
+  
+  filter:
+    User|equals:
+      - 'SYSTEM'
+      - 'Administrator'
+  
+  condition: keywords and not filter
+
+level: medium
+tags:
+  - attack.execution
+  - attack.t1059.003

@@ -1,0 +1,3 @@
+source="WinEventLog:Sysmon" EventCode=3 (Image="*cscript.exe" OR Image="*wscript.exe") (DestinationPort=80 OR DestinationPort=443 OR DestinationPort=8080) NOT (DestinationHostname="*microsoft.com" OR DestinationHostname="*windows.com")
+| stats count by ComputerName, DestinationHostname, DestinationPort
+| where count > 0

@@ -1,0 +1,5 @@
+DeviceProcessEvents
+| where FileName has_any ("cscript.exe", "wscript.exe")
+| where ProcessCommandLine contains ".vbs" or ProcessCommandLine contains ".js" or ProcessCommandLine contains "http" or ProcessCommandLine contains "cmd"
+| where AccountName != "SYSTEM"
+| project TimeGenerated, DeviceName, AccountName, FileName, ProcessCommandLine

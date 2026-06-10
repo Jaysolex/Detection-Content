@@ -1,0 +1,32 @@
+title: PowerShell Encoded Script Execution
+id: psh-001
+description: Detects PowerShell execution with encoded commands or suspicious functions (IEX, DownloadString, etc.)
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: powershell
+  definition: Event ID 4104 - PowerShell Script Block Logging
+
+detection:
+  keywords:
+    - '-enc'
+    - '-EncodedCommand'
+    - 'IEX'
+    - 'Invoke-Expression'
+    - 'DownloadString'
+    - 'FromBase64String'
+    - 'New-Object System.Net.WebClient'
+  
+  filter:
+    User|equals:
+      - 'SYSTEM'
+      - 'LOCAL SERVICE'
+  
+  condition: keywords and not filter
+
+level: medium
+tags:
+  - attack.execution
+  - attack.t1059.001

@@ -1,0 +1,33 @@
+title: Windows Script Host with Network Connection
+id: wsh-001
+description: Detects Script Host execution followed by network connections
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: sysmon
+  definition: Event ID 1 - Process Creation and Event ID 3 - Network Connection
+
+detection:
+  keywords:
+    - 'Image contains cscript.exe'
+    - 'Image contains wscript.exe'
+  
+  network:
+    - 'DestinationPort 80'
+    - 'DestinationPort 443'
+    - 'DestinationPort 8080'
+  
+  filter:
+    DestinationHostname|endswith:
+      - 'microsoft.com'
+      - 'windows.com'
+  
+  condition: keywords and network and not filter
+
+level: high
+tags:
+  - attack.execution
+  - attack.t1059.005
+  - attack.command_and_control

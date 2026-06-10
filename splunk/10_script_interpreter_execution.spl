@@ -1,0 +1,3 @@
+source="WinEventLog:Sysmon" EventCode=1 (Image="*cscript.exe" OR Image="*wscript.exe") (CommandLine="*.vbs*" OR CommandLine="*.js*" OR CommandLine="*http*" OR CommandLine="*cmd*") NOT User="SYSTEM"
+| stats count by ComputerName, User, Image
+| where count > 0

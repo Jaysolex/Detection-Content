@@ -1,0 +1,5 @@
+DeviceProcessEvents
+| where FileName == "cmd.exe"
+| where ProcessCommandLine contains "cmd /c" or ProcessCommandLine contains "&&" or ProcessCommandLine contains "||" or ProcessCommandLine contains "| powershell" or ProcessCommandLine contains "certutil" or ProcessCommandLine contains "bitsadmin" or ProcessCommandLine contains "mshta"
+| where AccountName !contains "SYSTEM" and AccountName !contains "Administrator"
+| project TimeGenerated, DeviceName, AccountName, ProcessCommandLine

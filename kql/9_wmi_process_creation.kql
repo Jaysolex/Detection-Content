@@ -1,0 +1,5 @@
+DeviceProcessEvents
+| where ParentFileName contains "WmiPrvSE.exe"
+| where ProcessCommandLine contains "Win32_Process" or ProcessCommandLine contains "Win32_Service"
+| where AccountName != "SYSTEM"
+| project TimeGenerated, DeviceName, AccountName, ParentFileName, FileName

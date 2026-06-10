@@ -1,0 +1,5 @@
+DeviceEvents
+| where ActionType == "PowerShellScriptBlockExecuted"
+| where ScriptBlockText contains "-enc" or ScriptBlockText contains "EncodedCommand" or ScriptBlockText contains "IEX" or ScriptBlockText contains "Invoke-Expression" or ScriptBlockText contains "DownloadString" or ScriptBlockText contains "FromBase64String"
+| where InitiatingProcessAccountName !contains "SYSTEM" and InitiatingProcessAccountName !contains "LOCAL SERVICE"
+| project TimeGenerated, DeviceName, InitiatingProcessAccountName, ScriptBlockText

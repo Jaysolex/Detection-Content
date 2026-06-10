@@ -1,0 +1,26 @@
+title: WMI Process Creation (Win32_Process)
+id: wmi-001
+description: Detects WMI-based process creation via Win32_Process class
+status: production
+author: Solomon James
+
+logsource:
+  product: windows
+  service: sysmon
+  definition: Event ID 1 - Process Creation
+
+detection:
+  keywords:
+    - 'ParentImage contains WmiPrvSE.exe'
+    - 'CommandLine contains Win32_Process'
+    - 'CommandLine contains Win32_Service'
+  
+  filter:
+    User|equals: 'SYSTEM'
+  
+  condition: keywords and not filter
+
+level: high
+tags:
+  - attack.execution
+  - attack.t1047

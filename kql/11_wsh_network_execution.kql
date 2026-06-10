@@ -1,0 +1,5 @@
+DeviceNetworkEvents
+| where InitiatingProcessFileName has_any ("cscript.exe", "wscript.exe")
+| where RemotePort in (80, 443, 8080)
+| where RemoteUrl !contains "microsoft.com" and RemoteUrl !contains "windows.com"
+| project TimeGenerated, DeviceName, RemoteUrl, RemotePort, InitiatingProcessFileName

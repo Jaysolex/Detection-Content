@@ -1,0 +1,3 @@
+source="WinEventLog:PowerShell" EventCode=4104 (ScriptBlockText="*-enc*" OR ScriptBlockText="*EncodedCommand*" OR ScriptBlockText="*IEX*" OR ScriptBlockText="*Invoke-Expression*" OR ScriptBlockText="*DownloadString*" OR ScriptBlockText="*FromBase64String*" OR ScriptBlockText="*New-Object System.Net.WebClient*") NOT (User="SYSTEM" OR User="LOCAL SERVICE")
+| stats count by ComputerName, User
+| where count > 0
