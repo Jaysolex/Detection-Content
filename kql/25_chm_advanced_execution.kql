@@ -1,0 +1,137 @@
+// ================================================================
+// DETECTION: Advanced CHM File Execution - APT-Grade
+// RULE ID:   25
+// MITRE:     T1218.001 | T1566.001 | T1204.002 | T1547.001 | T1053.005
+// TACTICS:   Initial Access | Execution | Defense Evasion | Persistence
+// SEVERITY:  CRITICAL
+// APT:       APT41, APT37, Kimsuky, Bitter APT, Silence, DeathStalker
+// DATA:      DeviceProcessEvents (MDE) + DeviceNetworkEvents
+// ================================================================
+
+let HighRiskChildren = dynamic([
+    // Script interpreters - APT37, Kimsuky, Bitter APT
+    "powershell.exe", "cmd.exe", "wscript.exe", "cscript.exe", "mshta.exe",
+    // Download cradles - APT41, Silence APT, DeathStalker
+    "certutil.exe", "bitsadmin.exe", "regsvr32.exe", "rundll32.exe", "msiexec.exe",
+    // Persistence - Kimsuky (reg.exe Run key), APT41 (schtasks)
+    "reg.exe", "regini.exe", "schtasks.exe", "at.exe",
+    // WMI execution - APT41 signature technique
+    "wmic.exe", "wmiprvse.exe"
+]);
+
+let SuspiciousDeliveryPaths = dynamic([
+    // Kimsuky ISO/VHD/ZIP container delivery paths
+    ".iso", ".vhd", "\\AppData\\Local\\Temp\\",
+    "\\Downloads\\", "\\Users\\Public\\"
+]);
+
+// ----------------------------------------------------------------
+// PRIMARY DETECTION: hh.exe spawning high-risk child processes
+// ----------------------------------------------------------------
+let CHMChildProcesses =
+DeviceProcessEvents
+| where InitiatingProcessFileName =~ "hh.exe"
+| where FileName in~ (HighRiskChildren)
+
+// Risk scoring aligned to real APT technique severity
+| extend RiskScore = case(
+    FileName in~ ("mshta.exe", "wmic.exe"),                    95,
+    FileName in~ ("certutil.exe", "bitsadmin.exe", "msiexec.exe"), 90,
+    FileName in~ ("regsvr32.exe", "schtasks.exe"),             88,
+    FileName in~ ("reg.exe", "powershell.exe"),                85,
+    FileName in~ ("rundll32.exe"),                             80,
+    FileName in~ ("wscript.exe", "cscript.exe"),               75,
+    FileName =~ "cmd.exe",                                     70,
+    60)
+
+// Technique classification for analyst triage
+| extend TechniqueCategory = case(
+    FileName in~ ("powershell.exe","cmd.exe","wscript.exe","cscript.exe"), "Script Execution",
+    FileName in~ ("certutil.exe","bitsadmin.exe","msiexec.exe"),           "Download Cradle",
+    FileName in~ ("reg.exe","regini.exe","schtasks.exe","at.exe"),         "Persistence",
+    FileName in~ ("mshta.exe","regsvr32.exe","rundll32.exe"),              "LOLBIN Proxy",
+    FileName in~ ("wmic.exe","wmiprvse.exe"),                              "WMI - APT41 TTP",
+    "Other")
+
+// Kimsuky Base64 VBScript encoding detection
+| extend EncodedPayload = iff(
+    ProcessCommandLine matches regex @"(?i)(-enc|-encoded|-e\s|frombase64|[A-Za-z0-9+/]{60,}={0,2})",
+    "YES - ENCODED PAYLOAD", "No")
+
+// Kimsuky container delivery detection (ISO/ZIP/VHD wrapping)
+| extend ContainerDelivery = iff(
+    InitiatingProcessCommandLine has_any (SuspiciousDeliveryPaths),
+    "YES - SUSPICIOUS DELIVERY PATH", "No")
+
+// Kimsuky Run key persistence command detection
+| extend RegistryPersistence = iff(
+    ProcessCommandLine matches regex @"(?i)(Run|CurrentVersion\\Run|Startup|Userinit|Winlogon|HKCU|HKLM)",
+    "YES - PERSISTENCE INDICATOR", "No")
+
+| project
+    TimeGenerated,
+    DeviceName,
+    AccountName,
+    InitiatingProcessFileName,
+    InitiatingProcessCommandLine,
+    FileName,
+    ProcessCommandLine,
+    TechniqueCategory,
+    RiskScore,
+    EncodedPayload,
+    ContainerDelivery,
+    RegistryPersistence
+| sort by RiskScore desc, TimeGenerated desc;
+
+// ----------------------------------------------------------------
+// SECONDARY DETECTION: hh.exe making outbound network connections
+// Kimsuky C2 callbacks, Bitter APT stage-2 downloads
+// ----------------------------------------------------------------
+let CHMNetworkConnections =
+DeviceNetworkEvents
+| where InitiatingProcessFileName =~ "hh.exe"
+| where RemotePort in (80, 443, 8080, 8443, 4444, 1337)
+| project
+    TimeGenerated,
+    DeviceName,
+    AccountName,
+    InitiatingProcessFileName,
+    RemoteIP,
+    RemoteUrl,
+    RemotePort
+| extend RiskScore = 95, TechniqueCategory = "C2 Callback / Payload Download",
+    EncodedPayload = "N/A", ContainerDelivery = "N/A", RegistryPersistence = "N/A",
+    FileName = "NETWORK EVENT", ProcessCommandLine = strcat("→ ", RemoteIP, ":", tostring(RemotePort)),
+    InitiatingProcessCommandLine = "hh.exe network connection";
+
+// ----------------------------------------------------------------
+// UNIFIED OUTPUT: Merge process and network detections
+// ----------------------------------------------------------------
+CHMChildProcesses
+| union CHMNetworkConnections
+| sort by RiskScore desc, TimeGenerated desc
+
+// ================================================================
+// WHAT THIS DETECTS:
+//   16 child process types + outbound network connections from hh.exe
+//   Covers all major APT CHM TTPs documented through 2025
+//
+// APT GROUP COVERAGE:
+//   APT41      → wmic.exe, schtasks.exe, cmd Cobalt Strike chain
+//   APT37      → powershell.exe autostart backdoor (FadeStealer)
+//   Kimsuky    → reg.exe Run key, Base64 VBScript, ISO/ZIP delivery
+//   Bitter APT → CHM first-stage, network C2 download
+//   Silence    → bitsadmin download cradle via CHM email bypass
+//   DeathStalker → CHM spearphishing, script execution
+//
+// RESPONSE MATRIX:
+//   RiskScore >= 90 + EncodedPayload=YES  → P1, isolate + memory dump immediately
+//   RiskScore >= 88 + RegistryPersistence → Check Run keys, revoke sessions
+//   TechniqueCategory = "C2 Callback"     → Block IP at firewall, threat intel pivot
+//   ContainerDelivery = YES               → Pull email gateway logs for sender
+//
+// FOLLOW-ON HUNTS:
+//   Lateral movement:  IdentityLogonEvents | where AccountUpn == "<user>"
+//   Scheduled tasks:   DeviceEvents | where ActionType == "ScheduledTaskCreated"
+//   Registry persist:  DeviceRegistryEvents | where RegistryKey contains "Run"
+// ================================================================

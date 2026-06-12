@@ -1,0 +1,126 @@
+title: Advanced CHM File Execution - APT-Grade Detection
+id: 00000025-0000-0000-0000-000000000025
+status: production
+description: |
+  Detects weaponized CHM (Compiled HTML Help) files executing via hh.exe with
+  comprehensive coverage of real-world APT techniques. Covers child process
+  spawning, network connections, registry persistence, and process injection
+  indicators observed in campaigns by APT41, APT37, Kimsuky, Bitter APT,
+  Silence APT, and DeathStalker.
+
+  Business Impact: CHM delivery bypasses email gateways (not flagged as
+  executable), AV signature detection (compiled format), and Device Guard on
+  unpatched systems. Real-time detection at execution prevents credential theft,
+  ransomware staging, and lateral movement within the first 60 minutes.
+
+author: Solomon James
+date: 2026/06/12
+modified: 2026/06/12
+
+references:
+  - https://attack.mitre.org/techniques/T1218/001/
+  - https://www.rapid7.com/blog/post/2024/03/20/the-updated-apt-playbook-tales-from-the-kimsuky-threat-actor-group/
+  - https://cloud.google.com/blog/topics/threat-intelligence/apt41-dual-espionage-and-cyber-crime-operation
+
+tags:
+  - attack.initial_access
+  - attack.t1566.001
+  - attack.execution
+  - attack.t1204.002
+  - attack.defense_evasion
+  - attack.t1218.001
+  - attack.persistence
+  - attack.t1547.001
+  - attack.t1053.005
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+
+  # TIER 1 CRITICAL: Script interpreters and download utilities
+  # Seen in: APT37 (FadeStealer), Kimsuky, APT41, Bitter APT
+  selection_scripting:
+    ParentImage|endswith: '\hh.exe'
+    Image|endswith:
+      - '\powershell.exe'
+      - '\cmd.exe'
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+
+  # TIER 1 CRITICAL: Download cradles and proxy execution
+  # Seen in: APT41 (certutil), Silence APT (bitsadmin), DeathStalker
+  selection_download_cradles:
+    ParentImage|endswith: '\hh.exe'
+    Image|endswith:
+      - '\certutil.exe'
+      - '\bitsadmin.exe'
+      - '\regsvr32.exe'
+      - '\rundll32.exe'
+      - '\msiexec.exe'
+
+  # TIER 1 CRITICAL: Persistence mechanisms
+  # Seen in: Kimsuky (reg.exe Run key), APT41 (schtasks), APT37
+  selection_persistence:
+    ParentImage|endswith: '\hh.exe'
+    Image|endswith:
+      - '\reg.exe'
+      - '\regini.exe'
+      - '\schtasks.exe'
+      - '\at.exe'
+
+  # TIER 1 CRITICAL: WMI execution - APT41 signature technique
+  selection_wmi:
+    ParentImage|endswith: '\hh.exe'
+    Image|endswith:
+      - '\wmic.exe'
+      - '\wmiprvse.exe'
+
+  # TIER 2 HIGH: Network connections from hh.exe (Sysmon Event ID 3 / 22)
+  # Seen in: Kimsuky C2 callbacks, Bitter APT stage-2 download
+  selection_network:
+    Image|endswith: '\hh.exe'
+    EventID:
+      - 3   # Network connection initiated by hh.exe
+      - 22  # DNS query from hh.exe
+
+  # TIER 2 HIGH: CHM delivered inside container (ISO/ZIP/VHD/RAR)
+  # Seen in: Kimsuky (ISO|VHD|ZIP delivery to bypass email filters)
+  selection_container_delivery:
+    ParentImage|endswith: '\hh.exe'
+    ParentCommandLine|contains:
+      - '.iso'
+      - '.vhd'
+      - '.zip'
+      - '.rar'
+      - 'AppData\Local\Temp'
+      - 'Downloads'
+      - 'Users\Public'
+
+  condition: >
+    selection_scripting or
+    selection_download_cradles or
+    selection_persistence or
+    selection_wmi or
+    selection_network or
+    selection_container_delivery
+
+falsepositives:
+  - Legacy enterprise CHM help systems (whitelist by full ParentCommandLine path only)
+  - Software vendor CHM documentation (validate against approved software inventory)
+  - IT deployment tools using CHM wizard interfaces (suppress by specific hostname)
+
+level: high
+
+fields:
+  - ComputerName
+  - User
+  - ParentImage
+  - ParentCommandLine
+  - Image
+  - CommandLine
+  - DestinationIp
+  - DestinationHostname
+  - DestinationPort

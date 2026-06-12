@@ -1,0 +1,105 @@
+| Comment "========================================================"
+| Comment "DETECTION: Advanced CHM File Execution - APT-Grade"
+| Comment "RULE ID:   25"
+| Comment "MITRE:     T1218.001 | T1566.001 | T1204.002 | T1547.001 | T1053.005"
+| Comment "TACTICS:   Initial Access | Execution | Defense Evasion | Persistence"
+| Comment "SEVERITY:  CRITICAL"
+| Comment "APT COVERAGE: APT41, APT37, Kimsuky, Bitter APT, Silence, DeathStalker"
+| Comment "DATA SOURCE: Sysmon Event ID 1, 3, 22"
+| Comment "========================================================"
+
+index=main sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=1
+    ParentImage="*\\hh.exe"
+    (
+      Image IN (
+        "*\\powershell.exe", "*\\cmd.exe", "*\\wscript.exe", "*\\cscript.exe",
+        "*\\mshta.exe", "*\\certutil.exe", "*\\bitsadmin.exe", "*\\regsvr32.exe",
+        "*\\rundll32.exe", "*\\msiexec.exe", "*\\reg.exe", "*\\regini.exe",
+        "*\\schtasks.exe", "*\\at.exe", "*\\wmic.exe", "*\\wmiprvse.exe"
+      )
+    )
+
+| Comment "--- Risk scoring based on real-world APT child process usage ---"
+
+| eval risk_score=case(
+    match(Image, "(?i)mshta"),      95,
+    match(Image, "(?i)wmic"),       95,
+    match(Image, "(?i)certutil"),   90,
+    match(Image, "(?i)bitsadmin"),  90,
+    match(Image, "(?i)msiexec"),    90,
+    match(Image, "(?i)regsvr32"),   88,
+    match(Image, "(?i)schtasks"),   88,
+    match(Image, "(?i)reg\.exe"),   85,
+    match(Image, "(?i)powershell"), 85,
+    match(Image, "(?i)rundll32"),   80,
+    match(Image, "(?i)cmd"),        70,
+    match(Image, "(?i)wscript"),    75,
+    match(Image, "(?i)cscript"),    75,
+    true(),                          60
+  )
+
+| Comment "--- Technique classification for analyst triage ---"
+
+| eval technique=case(
+    match(Image, "(?i)(powershell|cmd|wscript|cscript)"), "Script Execution",
+    match(Image, "(?i)(certutil|bitsadmin|msiexec)"),     "Download Cradle",
+    match(Image, "(?i)(reg\.exe|regini|schtasks|at\.exe)"),"Persistence Mechanism",
+    match(Image, "(?i)(mshta|regsvr32|rundll32)"),         "LOLBIN Proxy Execution",
+    match(Image, "(?i)(wmic|wmiprvse)"),                   "WMI Execution - APT41 TTP",
+    true(),                                                 "Other"
+  )
+
+| Comment "--- Flag encoded payloads - Kimsuky Base64 VBScript technique ---"
+
+| eval encoded_payload=if(
+    match(CommandLine, "(?i)(-enc|-encoded|-e\s|frombase64|[A-Za-z0-9+/]{60,}={0,2})"),
+    "YES - ENCODED PAYLOAD", "No"
+  )
+
+| Comment "--- Flag container delivery - Kimsuky ISO/ZIP/VHD wrapping ---"
+
+| eval container_delivery=if(
+    match(ParentCommandLine, "(?i)(\.iso|\.vhd|\.zip|\.rar|temp|downloads|public)"),
+    "YES - CONTAINER/SUSPICIOUS PATH", "No"
+  )
+
+| Comment "--- Flag registry persistence commands - Kimsuky Run key TTP ---"
+
+| eval registry_persistence=if(
+    match(CommandLine, "(?i)(run|currentversion|startup|userinit|winlogon|HKCU|HKLM)"),
+    "YES - POSSIBLE PERSISTENCE", "No"
+  )
+
+| Comment "--- Final analyst output ---"
+
+| table _time, ComputerName, User, ParentCommandLine, Image, CommandLine,
+         technique, risk_score, encoded_payload, container_delivery, registry_persistence
+
+| sort - risk_score
+
+| Comment "========================================================"
+| Comment "WHAT THIS DETECTS:"
+| Comment "  hh.exe spawning 14 high-risk child processes across 5 technique categories."
+| Comment "  Covers real-world TTPs from 6 confirmed APT groups."
+| Comment ""
+| Comment "RISK SCORE GUIDE:"
+| Comment "  95  = mshta/wmic (LOLBIN chain / APT41 WMI TTP)"
+| Comment "  90  = certutil/bitsadmin/msiexec (download cradles)"
+| Comment "  88  = regsvr32/schtasks (proxy execution / persistence)"
+| Comment "  85  = reg.exe/powershell (Kimsuky Run key / backdoor)"
+| Comment "  70+ = cmd/wscript/cscript (script execution)"
+| Comment ""
+| Comment "APT GROUP MAPPING:"
+| Comment "  APT41      → wmic, schtasks, cmd (Cobalt Strike delivery)"
+| Comment "  APT37      → powershell autostart backdoor via CHM"
+| Comment "  Kimsuky    → reg.exe Run key, Base64 VBScript, ISO/ZIP delivery"
+| Comment "  Bitter APT → CHM first-stage, remote server stage-2 download"
+| Comment "  Silence    → CHM email bypass, bitsadmin download"
+| Comment "  DeathStalker → CHM spearphishing, script execution"
+| Comment ""
+| Comment "IMMEDIATE SOC ACTIONS:"
+| Comment "  risk_score >= 90 → Isolate host NOW, escalate to IR team"
+| Comment "  encoded_payload=YES → Assume stage 2 running, memory dump immediately"
+| Comment "  registry_persistence=YES → Check Run keys, revoke user sessions"
+| Comment "  container_delivery=YES → Pull email gateway logs for delivery source"
+| Comment "========================================================"
