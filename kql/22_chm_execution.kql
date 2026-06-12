@@ -1,0 +1,11 @@
+// DETECTION: Malicious CHM File Execution
+// MITRE: T1218.001 (Compiled HTML File)
+
+DeviceProcessEvents
+| where InitiatingProcessFileName =~ "hh.exe"
+| where FileName in~ ("powershell.exe", "cmd.exe", "wscript.exe", "cscript.exe", "mshta.exe", "bitsadmin.exe")
+| project TimeGenerated, DeviceName, AccountName, InitiatingProcessFileName, FileName, ProcessCommandLine
+
+// WHAT THIS DETECTS: CHM files (hh.exe) spawning script interpreters
+// hh.exe should never launch PowerShell, CMD, or bitsadmin
+// SEVERITY: HIGH - Initial access via weaponized help file

@@ -1,0 +1,18 @@
+# DETECTION: RDP / Network Brute Force
+# MITRE: T1110.001 (Brute Force: Password Guessing)
+# DESCRIPTION: High volume of failed logons (4625) from one source over network/RDP
+# DATA SOURCE: Windows Security Event ID 4625
+
+index=main EventCode=4625 (Logon_Type=3 OR Logon_Type=10)
+| bucket _time span=5m
+| stats count AS failures values(Account_Name) AS targeted_accounts
+    by _time, Source_Network_Address
+| where failures > 10
+| sort - failures
+
+# WHAT THIS DOES:
+# Counts failed network/RDP logons per source IP in 5-minute windows
+# 10+ failures from one IP indicates automated password guessing
+
+# SEVERITY: HIGH
+# ACTION: Check for a matching 4624 (success). Block source IP, reset creds, enforce MFA

@@ -1,0 +1,31 @@
+title: Malicious CHM File Execution
+id: 00000022-0000-0000-0000-000000000022
+status: test
+description: Detects hh.exe spawning suspicious child processes or performing network/DNS activity, indicating weaponized CHM help file execution
+author: Solomon James
+tags:
+    - attack.t1218_001
+    - attack.t1566_001
+    - attack.t1204_002
+logsource:
+    product: windows
+    service: sysmon
+detection:
+    selection_child:
+        ParentImage|endswith: '\hh.exe'
+        Image|endswith:
+            - '\powershell.exe'
+            - '\cmd.exe'
+            - '\wscript.exe'
+            - '\cscript.exe'
+            - '\mshta.exe'
+            - '\bitsadmin.exe'
+    selection_network:
+        Image|endswith: '\hh.exe'
+        EventID:
+            - 3
+            - 22
+    condition: selection_child or selection_network
+falsepositives:
+    - Legitimate help file usage with network access (rare)
+level: high

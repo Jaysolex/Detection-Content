@@ -1,0 +1,12 @@
+// DETECTION: Malicious HTA Execution
+// MITRE: T1218.005 (Mshta)
+
+DeviceProcessEvents
+| where (FileName =~ "mshta.exe"
+        and ProcessCommandLine has_any ("http://", "https://", "vbscript:", "javascript:"))
+    or (InitiatingProcessFileName =~ "mshta.exe"
+        and FileName in~ ("powershell.exe", "cmd.exe", "wscript.exe", "cscript.exe"))
+| project TimeGenerated, DeviceName, AccountName, FileName, InitiatingProcessFileName, ProcessCommandLine
+
+// WHAT THIS DETECTS: mshta.exe loading remote content or spawning interpreters
+// SEVERITY: HIGH - LOLBIN abuse for malware delivery

@@ -1,0 +1,32 @@
+title: Malicious HTA Execution via mshta.exe
+id: 00000024-0000-0000-0000-000000000024
+status: test
+description: Detects mshta.exe executing remote content, suspicious script arguments, or spawning script interpreters - common LOLBIN abuse for malware delivery
+author: Solomon James
+tags:
+    - attack.t1218_005
+    - attack.t1566_001
+    - attack.t1059_005
+logsource:
+    product: windows
+    service: sysmon
+detection:
+    selection_cmdline:
+        Image|endswith: '\mshta.exe'
+        CommandLine|contains:
+            - 'http://'
+            - 'https://'
+            - 'vbscript:'
+            - 'javascript:'
+    selection_child:
+        ParentImage|endswith: '\mshta.exe'
+        Image|endswith:
+            - '\powershell.exe'
+            - '\cmd.exe'
+            - '\wscript.exe'
+            - '\cscript.exe'
+    condition: selection_cmdline or selection_child
+falsepositives:
+    - Legitimate internal HTA-based applications and intranet tools
+    - Legacy enterprise automation using mshta
+level: high

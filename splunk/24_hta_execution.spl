@@ -1,0 +1,20 @@
+# DETECTION: Malicious HTA Execution
+# MITRE: T1218.005 (System Binary Proxy Execution: Mshta)
+# DESCRIPTION: mshta.exe loading remote content or spawning script interpreters
+# DATA SOURCE: Sysmon Event ID 1
+
+index=main EventCode=1
+((Image="*\\mshta.exe" (CommandLine="*http://*" OR CommandLine="*https://*"
+    OR CommandLine="*vbscript:*" OR CommandLine="*javascript:*"))
+OR (ParentImage="*\\mshta.exe"
+    (Image="*\\powershell.exe" OR Image="*\\cmd.exe"
+     OR Image="*\\wscript.exe" OR Image="*\\cscript.exe")))
+| stats count by ComputerName, User, Image, ParentImage, CommandLine
+| where count > 0
+
+# WHAT THIS DOES:
+# Flags mshta.exe (a trusted LOLBIN) pulling remote scripts or launching interpreters
+# mshta calling out to the internet is highly abnormal
+
+# SEVERITY: HIGH
+# ACTION: Review command line URL, child process, and any downloaded payloads

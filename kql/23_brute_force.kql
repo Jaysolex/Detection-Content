@@ -1,0 +1,14 @@
+// DETECTION: RDP / Network Brute Force
+// MITRE: T1110.001 (Password Guessing)
+
+SecurityEvent
+| where EventID == 4625
+| where LogonType in (3, 10)
+| summarize Failures = count(), TargetedAccounts = make_set(TargetUserName)
+    by SourceIP = IpAddress, bin(TimeGenerated, 5m)
+| where Failures > 10
+| sort by Failures desc
+
+// WHAT THIS DETECTS: 10+ failed network/RDP logons per IP in 5 minutes
+// SEVERITY: HIGH - Automated credential guessing
+// NEXT STEP: Search for a 4624 success from the same IP (attacker got in)
