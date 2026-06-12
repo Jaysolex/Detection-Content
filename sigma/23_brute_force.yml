@@ -4,9 +4,9 @@ status: test
 description: Detects repeated failed logon attempts (Event 4625) over network or RDP logon types, indicating brute force credential attacks
 author: Solomon James
 tags:
-    - attack.t1110_001
-    - attack.t1110_003
-    - attack.t1021_001
+    - attack.t1110.001
+    - attack.t1110.003
+    - attack.t1021.001
 logsource:
     product: windows
     service: security

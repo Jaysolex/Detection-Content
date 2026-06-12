@@ -4,9 +4,9 @@ status: test
 description: Detects mshta.exe executing remote content, suspicious script arguments, or spawning script interpreters - common LOLBIN abuse for malware delivery
 author: Solomon James
 tags:
-    - attack.t1218_005
-    - attack.t1566_001
-    - attack.t1059_005
+    - attack.t1218.005
+    - attack.t1566.001
+    - attack.t1059.005
 logsource:
     product: windows
     service: sysmon
