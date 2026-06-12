@@ -3,7 +3,7 @@
 
 Production-ready detection rules, incident response playbooks, and security operations documentation for enterprise SOC teams.
 
-A comprehensive detection engineering framework covering 29+ MITRE ATT&CK techniques with Sigma rules, Splunk SPL queries, Microsoft Sentinel KQL, YARA signatures, false positive reduction evidence, and incident response playbooks.
+A comprehensive detection engineering framework covering 32+ MITRE ATT&CK techniques with Sigma rules, Splunk SPL queries, Microsoft Sentinel KQL, YARA signatures, false positive reduction evidence, and incident response playbooks.
 
 ---
 
@@ -33,6 +33,8 @@ Detection-Content/
 ### TA0001 • Initial Access
 - Office Macro Execution (T1566.001)
 - LNK Shortcut Abuse (T1547.009)
+- CHM Help File Execution (T1218.001)
+- Brute Force Attacks (T1110.001)
 - Phishing Attacks (T1566)
 
 ### TA0002 • Execution
@@ -54,6 +56,7 @@ Detection-Content/
 
 ### TA0005 • Defense Evasion
 - LOLBin Execution (T1218)
+- HTA / mshta.exe Abuse (T1218.005)
 - Process Injection (T1055)
 - File Deletion/Cleanup (T1070)
 - Timestomp Detection (T1070.006)
@@ -66,7 +69,7 @@ Detection-Content/
 - DNS Beaconing (T1071.004)
 - HTTP Beaconing (T1071.001)
 
-**Total Coverage: 29 MITRE Techniques across 7 tactics**
+**Total Coverage: 32 MITRE Techniques across 7 tactics**
 
 ---
 
@@ -104,7 +107,7 @@ yara yara/*.yar ~/Downloads/
 
 | Metric | Value |
 |--------|-------|
-| Detection Coverage | 29 MITRE techniques |
+| Detection Coverage | 32 MITRE techniques |
 | False Positive Reduction | 42-93% |
 | Alert Precision | 99%+ |
 | Investigation Time Reduction | 35% MTTR |
@@ -113,6 +116,11 @@ yara yara/*.yar ~/Downloads/
 ---
 
 ## 📖 Documentation
+
+### Detection Guides
+- [CHM File Detection Guide](docs/chm_detection_guide.md) — Detect weaponized Help files (hh.exe abuse) with Sigma rules and EVTX analysis
+- [Brute Force Detection Guide](docs/brute_force_detection_guide.md) — Detect RDP/network password attacks via Event ID 4625 correlation
+- [HTA File Detection Guide](docs/hta_detection_guide.md) — Detect mshta.exe abuse for malware delivery and persistence
 
 ### For SOC Analysts
 - Quick Start guides in each folder
