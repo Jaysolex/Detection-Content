@@ -1,0 +1,70 @@
+// ================================================================
+// DETECTION: ISO Mount + MOTW Bypass
+// RULE ID:   26
+// MITRE:     T1566.001 | T1553.005 | T1204.002
+// TACTICS:   Initial Access | Defense Evasion
+// SEVERITY:  HIGH
+// DATA:      DeviceEvents (MDE) + custom VHDMP log ingestion
+// ================================================================
+
+// ----------------------------------------------------------------
+// PRIMARY: ISO mount from suspicious delivery paths
+// ----------------------------------------------------------------
+let SuspiciousISOPaths = dynamic([
+    "\\Downloads\\", "\\Desktop\\", "\\AppData\\Local\\Temp\\",
+    "\\AppData\\Roaming\\", "\\Users\\Public\\"
+]);
+
+let SocialEngineeringNames = dynamic([
+    "invoice", "Invoice", "payment", "Payment",
+    "resume", "Resume", "receipt", "Receipt", "payroll"
+]);
+
+// VHDMP Event ID 12 — requires custom log ingestion or Event forwarding
+// Primary detection via DeviceProcessEvents for payload execution
+DeviceProcessEvents
+| where FolderPath matches regex @"^[D-Z]:\\"
+| where not (FolderPath startswith @"C:\Windows" or FolderPath startswith @"C:\Program Files")
+| extend MountedDrivePath = FolderPath
+| extend RiskScore = case(
+    FileName in~ ("powershell.exe", "mshta.exe", "wscript.exe", "cscript.exe"), 95,
+    FileName in~ ("cmd.exe", "certutil.exe", "bitsadmin.exe"),                  90,
+    FileName endswith ".exe",                                                    80,
+    FileName endswith ".lnk",                                                    85,
+    70)
+| extend TechniqueNote = case(
+    FileName in~ ("powershell.exe","mshta.exe","wscript.exe","cscript.exe"),
+        "Script interpreter from mounted ISO — MOTW bypass execution",
+    FileName endswith ".lnk",
+        "LNK shortcut from mounted ISO — common phishing payload",
+    FileName endswith ".exe",
+        "Executable from mounted ISO — no MOTW warning shown to user",
+    "Process from mounted drive")
+| project
+    TimeGenerated,
+    DeviceName,
+    AccountName,
+    MountedDrivePath,
+    FileName,
+    ProcessCommandLine,
+    InitiatingProcessFileName,
+    RiskScore,
+    TechniqueNote
+| sort by RiskScore desc, TimeGenerated desc
+
+// ================================================================
+// WHAT THIS DETECTS:
+//   Processes executing from mounted drive letters (D:-Z:)
+//   These paths indicate ISO/VHD content running without MOTW
+//
+// ATTACK CHAIN (from lab):
+//   08:34:23  Invoice.iso mounted (VHDMP Event ID 12)
+//   08:34:30  User opens Invoice.lnk from mounted drive
+//   08:34:31  PowerShell.exe starts (this rule fires here)
+//   08:34:33  Network connection to C2
+//   08:34:40  Malware downloaded and executed
+//
+// FOLLOW-ON HUNTS:
+//   Network: DeviceNetworkEvents | where InitiatingProcessFolderPath matches regex "^[D-Z]:\\"
+//   Files:   DeviceFileEvents | where FolderPath matches regex "^[D-Z]:\\"
+// ================================================================

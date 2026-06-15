@@ -1,0 +1,75 @@
+title: Suspicious ISO Mount with MOTW Bypass Indicators
+id: 00000026-0000-0000-0000-000000000026
+status: production
+description: |
+  Detects ISO image mounting via VHDMP Event ID 12 from suspicious locations
+  (Downloads, Desktop, Temp) — a common attacker technique to bypass Mark of
+  the Web (MOTW) protections. Files inside mounted ISOs do not inherit the
+  Zone.Identifier ADS from the parent ISO, allowing malicious executables,
+  LNK files, and scripts to execute without MOTW-based security warnings.
+
+  Observed in campaigns by Emotet, QakBot, Bumblebee, IcedID, and multiple
+  nation-state actors following Microsoft's 2022 macro-blocking policy, which
+  drove attackers to ISO/container-based delivery as the primary alternative.
+
+  Business Impact: ISO delivery bypasses Protected View, PowerShell execution
+  warnings, and SmartScreen — all MOTW-dependent controls. Detection at mount
+  time provides a pre-execution opportunity to investigate before payload runs.
+
+author: Solomon James
+date: 2026/06/12
+modified: 2026/06/12
+
+references:
+  - https://attack.mitre.org/techniques/T1553/005/
+  - https://attack.mitre.org/techniques/T1566/001/
+
+tags:
+  - attack.initial_access
+  - attack.t1566.001
+  - attack.defense_evasion
+  - attack.t1553.005
+  - attack.t1204.002
+
+logsource:
+  product: windows
+  service: vhdmp
+
+detection:
+  # PRIMARY: ISO mounted from user-writable / phishing delivery locations
+  selection_suspicious_mount:
+    EventID: 12
+    Provider|contains: 'VHD'
+    VhdFile|contains:
+      - '\Downloads\'
+      - '\Desktop\'
+      - '\AppData\Local\Temp\'
+      - '\AppData\Roaming\'
+      - '\Users\Public\'
+      - 'invoice'
+      - 'Invoice'
+      - 'payment'
+      - 'resume'
+      - 'Receipt'
+
+  # SECONDARY: Any ISO mount (broader coverage for high-security environments)
+  selection_any_mount:
+    EventID: 12
+    Provider|contains: 'VHD'
+
+  condition: selection_suspicious_mount
+
+falsepositives:
+  - IT software deployment using ISO images (whitelist by VhdFile path)
+  - Virtual machine disk operations (VHD/VHDX files — filter by VhdType)
+  - Legitimate software installation from ISO (whitelist by known vendor paths)
+
+level: high
+
+fields:
+  - VhdFile
+  - User
+  - TimeCreated
+  - ComputerName
+  - VhdType
+  - ReadOnly

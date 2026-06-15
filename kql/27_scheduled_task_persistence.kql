@@ -1,0 +1,117 @@
+// ================================================================
+// DETECTION: Suspicious Scheduled Task Creation
+// RULE ID:   27
+// MITRE:     T1053.005 | T1059.001
+// TACTICS:   Persistence | Execution
+// SEVERITY:  HIGH
+// DATA:      DeviceProcessEvents (MDE)
+// ================================================================
+
+let HighRiskParents = dynamic([
+    "powershell.exe", "cmd.exe", "wscript.exe",
+    "cscript.exe", "mshta.exe", "python.exe"
+]);
+
+let WritableLocations = dynamic([
+    "\\ProgramData\\", "\\AppData\\", "\\Temp\\",
+    "\\Downloads\\", "\\Users\\Public\\"
+]);
+
+let LegitimateOfficePattern = "integrator.exe";
+
+// ----------------------------------------------------------------
+// PRIMARY: schtasks.exe or at.exe execution
+// ----------------------------------------------------------------
+let ScheduledTaskExecution =
+DeviceProcessEvents
+| where FileName in~ ("schtasks.exe", "at.exe")
+| where not (InitiatingProcessFileName =~ LegitimateOfficePattern
+    and ProcessCommandLine has "Microsoft\\Office")
+| extend RiskScore = case(
+    InitiatingProcessFileName in~ (HighRiskParents)
+        and ProcessCommandLine has_any (WritableLocations), 98,
+    ProcessCommandLine has_any ("http://", "https://", "-enc", "-encoded"), 95,
+    InitiatingProcessFileName in~ (HighRiskParents),        90,
+    ProcessCommandLine has_any (WritableLocations),          88,
+    ProcessCommandLine has_any ("ONLOGON","ONSTART","AtStartup","AtLogon"), 85,
+    60)
+| extend PersistenceType = case(
+    ProcessCommandLine has "/Create",  "Task Creation",
+    ProcessCommandLine has "/Change",  "Task Modification",
+    ProcessCommandLine has "/Delete",  "Task Deletion",
+    "Task Utility Execution")
+| extend PayloadRisk = iff(
+    ProcessCommandLine has_any (WritableLocations),
+    "HIGH - Writable location payload", "Standard")
+| extend SuspiciousParent = iff(
+    InitiatingProcessFileName in~ (HighRiskParents),
+    strcat("YES - ", InitiatingProcessFileName), "No");
+
+// ----------------------------------------------------------------
+// SECONDARY: PowerShell Register-ScheduledTask
+// From lab: explorer.exe → powershell.exe -command Register-ScheduledTask
+// ----------------------------------------------------------------
+let PowerShellTaskRegistration =
+DeviceProcessEvents
+| where FileName =~ "powershell.exe"
+| where ProcessCommandLine has_any ("Register-ScheduledTask", "New-ScheduledTask", "ScheduledTask")
+| extend RiskScore = case(
+    ProcessCommandLine has "AtStartup" or ProcessCommandLine has "AtLogon", 92,
+    ProcessCommandLine has "SYSTEM",   90,
+    85)
+| extend PersistenceType = "PowerShell Register-ScheduledTask"
+| extend PayloadRisk = iff(
+    ProcessCommandLine has_any (WritableLocations),
+    "HIGH - Writable location", "Review CommandLine")
+| extend SuspiciousParent = strcat("Parent: ", InitiatingProcessFileName);
+
+// ----------------------------------------------------------------
+// UNIFIED OUTPUT
+// ----------------------------------------------------------------
+ScheduledTaskExecution
+| union PowerShellTaskRegistration
+| project
+    TimeGenerated,
+    DeviceName,
+    AccountName,
+    InitiatingProcessFileName,
+    FileName,
+    ProcessCommandLine,
+    PersistenceType,
+    PayloadRisk,
+    SuspiciousParent,
+    RiskScore
+| sort by RiskScore desc, TimeGenerated desc
+
+// ================================================================
+// CONFIRMED MALICIOUS EVENTS FROM LAB (2024-04-03):
+//
+// EVENT 1 — 14:42:12
+//   Parent: powershell.exe (spawned by user)
+//   Command: schtasks.exe /Create /SC DAILY /TN MyTask
+//            /TR C:\ProgramData\st2.exe /ST 08:00
+//   RiskScore: 98 — Script parent + ProgramData payload
+//
+// EVENT 2 — 13:01:42
+//   Parent: explorer.exe
+//   Command: powershell.exe -command Register-ScheduledTask
+//            -TaskName MyTask -Execute notepad.exe
+//            -Trigger AtStartup -User SYSTEM
+//   RiskScore: 92 — SYSTEM-level startup persistence
+//
+// LEGITIMATE EVENTS (filtered out):
+//   Parent: Integrator.exe (Microsoft Office)
+//   Command: schtasks /Create "Microsoft\Office\..." /XML ...
+//   These are normal Office maintenance tasks — suppressed
+//
+// RESPONSE MATRIX:
+//   RiskScore 98 → Isolate host, hash payload, sandbox analysis
+//   RiskScore 90+ → Disable task immediately, trace initial access
+//   PayloadRisk = HIGH → File investigation before task executes
+//   PersistenceType = PowerShell → Check for additional persistence mechanisms
+//
+// FOLLOW-ON HUNTS:
+//   Task execution: DeviceEvents | where ActionType == "ScheduledTaskCreated"
+//   Payload file:  DeviceFileEvents | where FolderPath has "ProgramData"
+//   Registry:      DeviceRegistryEvents | where RegistryKey contains "Run"
+// ================================================================

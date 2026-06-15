@@ -1,0 +1,55 @@
+title: Process Execution from Mounted ISO Drive (MOTW Bypass)
+id: 00000026-0000-0000-0001-000000000026
+status: production
+description: |
+  Detects process creation from mounted drive letters (D-Z) that are not
+  fixed storage drives. When an ISO is mounted, Windows assigns a drive letter
+  (D:, E:, F:, G:, etc.). Legitimate software rarely executes from these paths —
+  malicious payloads embedded in ISOs frequently do.
+
+  Correlate with VHDMP Event ID 12 (Rule 26) for full ISO attack chain coverage.
+  Together they provide: Mount → Execution → (Network/Persistence) visibility.
+
+author: Solomon James
+date: 2026/06/12
+tags:
+  - attack.initial_access
+  - attack.t1566.001
+  - attack.defense_evasion
+  - attack.t1553.005
+  - attack.execution
+  - attack.t1204.002
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  # Execution from mounted drive letters (D: through Z:)
+  selection_mounted_drive:
+    EventID: 1
+    Image|re: '^[D-Z]:\\'
+
+  # High-risk file types executed from mounted drives
+  filter_legitimate:
+    Image|contains:
+      - 'C:\Windows\'
+      - 'C:\Program Files\'
+      - 'C:\Program Files (x86)\'
+
+  condition: selection_mounted_drive and not filter_legitimate
+
+falsepositives:
+  - Software installers run from optical drives or USB drives
+  - Enterprise software deployment from mapped network drives
+  - Virtual machine tools or drivers (filter by known vendor signatures)
+
+level: high
+
+fields:
+  - Image
+  - CommandLine
+  - ParentImage
+  - ParentCommandLine
+  - User
+  - ComputerName

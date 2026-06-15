@@ -1,0 +1,115 @@
+title: Suspicious Scheduled Task Creation - Persistence Detection
+id: 00000027-0000-0000-0000-000000000027
+status: production
+description: |
+  Detects suspicious scheduled task creation via schtasks.exe, at.exe, or
+  PowerShell's Register-ScheduledTask cmdlet. Scheduled tasks are one of the
+  most reliable persistence mechanisms used by attackers after initial access —
+  they survive reboots, run as SYSTEM or the compromised user, and blend with
+  legitimate Windows maintenance tasks.
+
+  Key indicators from lab analysis:
+  - powershell.exe → schtasks.exe /Create (confirmed malicious chain)
+  - Task running from C:\ProgramData\ (writable, commonly abused)
+  - Register-ScheduledTask via PowerShell with -AtStartup trigger
+  - Generic task names (MyTask) vs descriptive legitimate names
+
+  Business Impact: Persistence via scheduled task guarantees attacker re-entry
+  after remediation unless explicitly detected and removed. Mean time to detect
+  without this rule: typically found only during post-incident forensics.
+
+author: Solomon James
+date: 2026/06/12
+modified: 2026/06/12
+
+references:
+  - https://attack.mitre.org/techniques/T1053/005/
+
+tags:
+  - attack.persistence
+  - attack.t1053.005
+  - attack.execution
+  - attack.t1059.001
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  # TIER 1: schtasks.exe or at.exe execution
+  selection_task_util:
+    EventID: 1
+    Image|endswith:
+      - '\schtasks.exe'
+      - '\at.exe'
+
+  # TIER 1: PowerShell Register-ScheduledTask (seen in lab: explorer.exe → powershell → Register-ScheduledTask)
+  selection_powershell_task:
+    EventID: 1
+    Image|endswith: '\powershell.exe'
+    CommandLine|contains:
+      - 'Register-ScheduledTask'
+      - 'New-ScheduledTask'
+      - 'ScheduledTask'
+
+  # HIGH-RISK: Task creation with suspicious parent processes
+  # From lab: powershell.exe created schtasks with /TR C:\ProgramData\st2.exe
+  selection_suspicious_parent:
+    EventID: 1
+    Image|endswith: '\schtasks.exe'
+    ParentImage|endswith:
+      - '\powershell.exe'
+      - '\cmd.exe'
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+      - '\python.exe'
+
+  # HIGH-RISK: Task payload running from writable locations
+  selection_suspicious_payload:
+    EventID: 1
+    Image|endswith: '\schtasks.exe'
+    CommandLine|contains:
+      - '\ProgramData\'
+      - '\AppData\'
+      - '\Temp\'
+      - '\Downloads\'
+      - '\Users\Public\'
+      - 'http://'
+      - 'https://'
+      - '-enc'
+      - '-encoded'
+
+  # MEDIUM: Startup/logon triggers — persistence indicators
+  selection_persistence_trigger:
+    EventID: 1
+    Image|endswith: '\schtasks.exe'
+    CommandLine|contains:
+      - '/SC ONLOGON'
+      - '/SC ONSTART'
+      - '/SC ONSTARTUP'
+      - 'AtStartup'
+      - 'AtLogon'
+
+  condition: >
+    selection_suspicious_parent or
+    selection_suspicious_payload or
+    selection_persistence_trigger or
+    selection_powershell_task
+
+falsepositives:
+  - Microsoft Office updates via Integrator.exe spawning schtasks (whitelist by ParentImage path)
+  - Software installers creating maintenance tasks (whitelist by CommandLine /TN pattern)
+  - Windows Update and system maintenance (whitelist by NT AUTHORITY\SYSTEM + known task names)
+  - IT administration scripts (document and suppress by hostname or user)
+
+level: high
+
+fields:
+  - Image
+  - CommandLine
+  - ParentImage
+  - ParentCommandLine
+  - User
+  - IntegrityLevel
+  - ComputerName

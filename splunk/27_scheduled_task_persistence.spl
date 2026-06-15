@@ -1,0 +1,94 @@
+| Comment "========================================================"
+| Comment "DETECTION: Suspicious Scheduled Task Creation"
+| Comment "RULE ID:   27"
+| Comment "MITRE:     T1053.005 | T1059.001"
+| Comment "TACTICS:   Persistence | Execution"
+| Comment "SEVERITY:  HIGH"
+| Comment "DATA SOURCE: Sysmon Event ID 1 (Process Creation)"
+| Comment "========================================================"
+
+| Comment "--- STAGE 1: Detect schtasks/at.exe and PowerShell task registration ---"
+
+index=main sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=1
+(Image="*\\schtasks.exe" OR Image="*\\at.exe"
+ OR (Image="*\\powershell.exe"
+     (CommandLine="*Register-ScheduledTask*" OR CommandLine="*New-ScheduledTask*")))
+
+| Comment "--- STAGE 2: Risk scoring ---"
+
+| eval risk_score=case(
+    match(ParentImage, "(?i)(powershell|wscript|cscript|mshta)") AND
+    match(CommandLine, "(?i)(programdata|appdata|temp|downloads|public)"), 98,
+    match(ParentImage, "(?i)(powershell|wscript|cscript|mshta)"),          90,
+    match(CommandLine, "(?i)(programdata|appdata|temp|downloads|public)"),  88,
+    match(CommandLine, "(?i)(http://|https://|-enc|-encoded)"),             95,
+    match(CommandLine, "(?i)(onlogon|onstart|onstartup|atstartup)"),        85,
+    match(CommandLine, "(?i)register-scheduledtask"),                        85,
+    true(),                                                                  60
+  )
+
+| Comment "--- STAGE 3: Classify the persistence technique ---"
+
+| eval persistence_type=case(
+    match(CommandLine, "(?i)register-scheduledtask"),         "PowerShell Task Registration",
+    match(CommandLine, "(?i)/create"),                         "schtasks /Create",
+    match(CommandLine, "(?i)/change"),                         "schtasks /Change (modify existing)",
+    match(CommandLine, "(?i)/delete"),                         "schtasks /Delete",
+    true(),                                                    "Task Utility Execution"
+  )
+
+| eval payload_location=case(
+    match(CommandLine, "(?i)programdata"),  "C:\\ProgramData\\ — HIGH RISK",
+    match(CommandLine, "(?i)appdata"),      "%AppData% — HIGH RISK",
+    match(CommandLine, "(?i)temp"),         "%TEMP% — HIGH RISK",
+    match(CommandLine, "(?i)downloads"),    "Downloads — HIGH RISK",
+    match(CommandLine, "(?i)public"),       "C:\\Users\\Public\\ — HIGH RISK",
+    match(CommandLine, "(?i)windows\\system32"), "System32 — likely legitimate",
+    match(CommandLine, "(?i)program files"), "Program Files — likely legitimate",
+    true(),                                  "Unknown location"
+  )
+
+| eval suspicious_parent=if(
+    match(ParentImage, "(?i)(powershell|wscript|cscript|mshta|python|cmd)"),
+    "YES - SCRIPT HOST PARENT", "No"
+  )
+
+| Comment "--- STAGE 4: Filter out known legitimate Office/Windows tasks ---"
+
+| where NOT (
+    match(ParentImage, "(?i)integrator\.exe") AND
+    match(CommandLine, "(?i)(microsoft\\office|clicktorun)")
+  )
+
+| table _time, ComputerName, User, IntegrityLevel, ParentImage, CommandLine,
+         persistence_type, payload_location, suspicious_parent, risk_score
+
+| sort - risk_score
+
+| Comment "========================================================"
+| Comment "WHAT THIS DETECTS:"
+| Comment "  Scheduled task creation via schtasks.exe, at.exe, or PowerShell."
+| Comment "  Filters known legitimate MS Office tasks to reduce false positives."
+| Comment ""
+| Comment "FROM THE LAB — CONFIRMED MALICIOUS EVENTS:"
+| Comment "  powershell.exe → schtasks /Create /SC DAILY /TN MyTask"
+| Comment "                              /TR C:\\ProgramData\\st2.exe /ST 08:00"
+| Comment "  Risk: PowerShell parent + ProgramData payload = near-certain malicious"
+| Comment ""
+| Comment "  powershell.exe → Register-ScheduledTask -TaskName MyTask"
+| Comment "                   -Action notepad.exe -Trigger AtStartup -User SYSTEM"
+| Comment "  Risk: SYSTEM-level startup task created by user-level PowerShell"
+| Comment ""
+| Comment "RISK SCORE GUIDE:"
+| Comment "  98 = Script parent + writable path payload (confirmed malicious pattern)"
+| Comment "  95 = Encoded/download payload in CommandLine"
+| Comment "  90 = Script host parent (powershell/mshta/wscript)"
+| Comment "  88 = Payload in writable location (ProgramData, Temp, Downloads)"
+| Comment "  85 = Startup/logon trigger or PowerShell Register-ScheduledTask"
+| Comment ""
+| Comment "IMMEDIATE ACTIONS:"
+| Comment "  risk_score >= 90 → Investigate payload file immediately"
+| Comment "  payload_location = HIGH RISK → Hash the executable, submit to sandbox"
+| Comment "  suspicious_parent = YES → Trace back to initial access vector"
+| Comment "  Check if task already executed: Event ID 200/201 (Task Scheduler log)"
+| Comment "========================================================"

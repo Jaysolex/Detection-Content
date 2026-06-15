@@ -1,0 +1,50 @@
+| Comment "========================================================"
+| Comment "DETECTION: ISO Mount + MOTW Bypass"
+| Comment "RULE ID:   26"
+| Comment "MITRE:     T1566.001 | T1553.005 | T1204.002"
+| Comment "TACTICS:   Initial Access | Defense Evasion"
+| Comment "SEVERITY:  HIGH"
+| Comment "DATA SOURCE: Microsoft-Windows-VHDMP/Operational (Event ID 12)"
+| Comment "========================================================"
+
+| Comment "--- STAGE 1: Detect ISO mount from suspicious locations ---"
+
+index=main sourcetype=XmlWinEventLog:Microsoft-Windows-VHDMP/Operational EventCode=12
+
+| eval suspicious_path=if(
+    match(VhdFile, "(?i)(downloads|desktop|temp|appdata|public|invoice|payment|resume|receipt)"),
+    "YES - SUSPICIOUS DELIVERY PATH", "No"
+  )
+
+| eval iso_name=replace(VhdFile, ".*\\\\", "")
+
+| eval risk_score=case(
+    match(VhdFile, "(?i)(invoice|payment|receipt|resume)"), 95,
+    match(VhdFile, "(?i)(downloads|desktop)"),              85,
+    match(VhdFile, "(?i)(temp|appdata|public)"),            80,
+    true(),                                                  60
+  )
+
+| Comment "--- STAGE 2: Analyst-ready output ---"
+
+| table _time, ComputerName, User, iso_name, VhdFile, risk_score, suspicious_path
+
+| sort - risk_score
+
+| Comment "========================================================"
+| Comment "WHAT THIS DETECTS:"
+| Comment "  ISO files mounted from user-accessible paths (Downloads, Desktop, Temp)."
+| Comment "  Files inside mounted ISOs lose MOTW — execute without security warnings."
+| Comment ""
+| Comment "RISK SCORE GUIDE:"
+| Comment "  95 = Social engineering filename (invoice, payment, resume)"
+| Comment "  85 = Downloads/Desktop path — direct phishing delivery"
+| Comment "  80 = Temp/AppData — potential dropper staging"
+| Comment ""
+| Comment "IMMEDIATE ACTIONS:"
+| Comment "  1. Note the ISO filename and path as evidence"
+| Comment "  2. Search Sysmon Event ID 1 for processes spawned from E:\, F:\, G:\"
+| Comment "  3. Check Sysmon Event ID 3 for network connections after mount time"
+| Comment "  4. Search for LNK or script execution within 60 seconds of mount"
+| Comment "  5. Correlate with email gateway — who sent this ISO?"
+| Comment "========================================================"
