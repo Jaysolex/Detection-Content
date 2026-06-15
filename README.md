@@ -3,7 +3,7 @@
 
 Production-ready detection rules, incident response playbooks, and security operations documentation for enterprise SOC teams.
 
-A comprehensive detection engineering framework covering 32+ MITRE ATT&CK techniques with Sigma rules, Splunk SPL queries, Microsoft Sentinel KQL, YARA signatures, false positive reduction evidence, and incident response playbooks.
+A comprehensive detection engineering framework covering 37+ MITRE ATT&CK techniques with Sigma rules, Splunk SPL queries, Microsoft Sentinel KQL, YARA signatures, false positive reduction evidence, and incident response playbooks.
 
 ---
 
@@ -33,9 +33,10 @@ Detection-Content/
 ### TA0001 • Initial Access
 - Office Macro Execution (T1566.001)
 - LNK Shortcut Abuse (T1547.009)
-- CHM Help File Execution (T1218.001)
+- CHM Help File Execution (T1218.001) — Basic + APT-Grade (Rules 22, 25)
 - Brute Force Attacks (T1110.001)
 - Phishing Attacks (T1566)
+- ISO File Delivery + MOTW Bypass (T1553.005)
 
 ### TA0002 • Execution
 - PowerShell Script Execution (T1059.001)
@@ -43,6 +44,7 @@ Detection-Content/
 - WMI Execution (T1047)
 - Script Interpreter Usage (T1059)
 - Windows Script Host (T1059.005)
+- Scheduled Task Execution (T1053.005)
 
 ### TA0003 • Persistence
 - Scheduled Task Creation (T1053.005)
@@ -60,6 +62,8 @@ Detection-Content/
 - Process Injection (T1055)
 - File Deletion/Cleanup (T1070)
 - Timestomp Detection (T1070.006)
+- Mark of the Web Bypass via ISO (T1553.005)
+- Mounted Drive Payload Execution (T1553.005)
 
 ### TA0008 • Lateral Movement
 - Remote Service Execution (T1570)
@@ -69,7 +73,7 @@ Detection-Content/
 - DNS Beaconing (T1071.004)
 - HTTP Beaconing (T1071.001)
 
-**Total Coverage: 32 MITRE Techniques across 7 tactics**
+**Total Coverage: 37+ MITRE Techniques across 7 tactics**
 
 ---
 
@@ -107,7 +111,12 @@ yara yara/*.yar ~/Downloads/
 
 | Metric | Value |
 |--------|-------|
-| Detection Coverage | 32 MITRE techniques |
+| Detection Coverage | 37+ MITRE techniques |
+| Sigma Rules | 28 |
+| Splunk SPL Rules | 27 |
+| KQL Rules | 27 |
+| YARA Rules | 5 |
+| Detection Guides | 7 |
 | False Positive Reduction | 42-93% |
 | Alert Precision | 99%+ |
 | Investigation Time Reduction | 35% MTTR |
@@ -119,8 +128,12 @@ yara yara/*.yar ~/Downloads/
 
 ### Detection Guides
 - [CHM File Detection Guide](docs/chm_detection_guide.md) — Detect weaponized Help files (hh.exe abuse) with Sigma rules and EVTX analysis
+- [CHM Advanced Detection Guide](docs/chm_advanced_detection_guide.md) — APT-grade CHM detection covering APT41, APT37, Kimsuky, Bitter APT, Silence, DeathStalker
 - [Brute Force Detection Guide](docs/brute_force_detection_guide.md) — Detect RDP/network password attacks via Event ID 4625 correlation
 - [HTA File Detection Guide](docs/hta_detection_guide.md) — Detect mshta.exe abuse for malware delivery and persistence
+- [ISO & MOTW Bypass Detection Guide](docs/iso_motw_detection_guide.md) — Detect ISO container delivery and Mark of the Web bypass techniques
+- [Scheduled Task Detection Guide](docs/scheduled_task_detection_guide.md) — Detect persistence via scheduled task creation (schtasks, at.exe, PowerShell)
+- [Chainsaw Integration Guide](docs/chainsaw_integration.md) — SIEM-less threat hunting with Chainsaw
 
 ### For SOC Analysts
 - Quick Start guides in each folder
@@ -137,12 +150,14 @@ yara yara/*.yar ~/Downloads/
 ## ✓ Key Features
 
 - Production-ready detection rules tested in enterprise SOC environments
+- APT-mapped rules with real-world threat intelligence (APT41, APT37, Kimsuky, Bitter APT, Silence APT, DeathStalker)
 - Comprehensive documentation for analysts at all experience levels
 - Tuned for high precision (99%+) with low false positive rates
 - MITRE ATT&CK aligned for threat mapping and coverage assessment
 - Multi-platform support (Sigma, Splunk, Microsoft Sentinel, YARA)
 - Complete incident response playbooks with investigation procedures
 - Evidence-based metrics and false positive reduction case studies
+- Risk-scored detections with analyst triage guidance built into every rule
 
 ---
 
@@ -150,8 +165,8 @@ yara yara/*.yar ~/Downloads/
 
 ### Office Macro Detection Case Study
 
-**Initial version:** 58% false positives  
-**Final version:** 4% false positives  
+**Initial version:** 58% false positives
+**Final version:** 4% false positives
 **Reduction:** 93% improvement through iterative tuning
 
 See `evidence/fp_reduction_case_study.md` for detailed tuning methodology.
@@ -161,8 +176,10 @@ See `evidence/fp_reduction_case_study.md` for detailed tuning methodology.
 ## 🔒 Data Requirements
 
 - **Sysmon:** Event ID 1, 3, 11, 13 (Process, Network, File, Registry events)
-- **Windows Event Logs:** Event ID 4688 (Process Creation)
+- **Windows Event Logs:** Event ID 4688 (Process Creation), 4625 (Failed Logon)
+- **VHDMP Operational Log:** Event ID 12 (ISO Mount — for ISO/MOTW detection)
 - **PowerShell Logging:** Event ID 4104 (Script Block Logging)
+- **Task Scheduler Log:** Event ID 200/201 (Task execution — for persistence validation)
 - **Network Logs:** DNS, HTTP/HTTPS traffic (optional for C2 detection)
 
 ---
@@ -173,7 +190,7 @@ For production deployment:
 
 - **Splunk:** See `docs/splunk_deployment.md`
 - **Microsoft Sentinel:** See `docs/sentinel_deployment.md`
-- **Sigma/Chainsaw:** See `docs/sigma_integration.md`
+- **Sigma/Chainsaw:** See `docs/chainsaw_integration.md`
 
 For tuning and optimization:
 
@@ -195,4 +212,4 @@ For tuning and optimization:
 
 MIT License - Free to use, modify, and distribute
 
-**Last Updated:** June 2026 | **Status:** Production Ready | **Version:** 2.0
+**Last Updated:** June 2026 | **Status:** Production Ready | **Version:** 2.1
