@@ -1,0 +1,82 @@
+| Comment "========================================================"
+| Comment "DETECTION: Suspicious Local User Account Creation"
+| Comment "RULE ID:   29"
+| Comment "MITRE:     T1136.001 | T1098"
+| Comment "TACTICS:   Persistence | Privilege Escalation"
+| Comment "SEVERITY:  HIGH"
+| Comment "DATA SOURCE: Sysmon Event ID 1 + Security Event ID 4720/4732"
+| Comment "========================================================"
+
+| Comment "--- PRIMARY: net.exe/net1.exe with /add parameter ---"
+
+index=main
+(sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=1
+    (Image="*\\net.exe" OR Image="*\\net1.exe")
+    (CommandLine="*user*" AND CommandLine="*/add*"))
+OR
+(sourcetype=XmlWinEventLog:Security EventCode IN (4720, 4732))
+
+| eval detection_method=case(
+    EventCode=4720, "PRIMARY — Event ID 4720 (User Account Created)",
+    EventCode=4732, "PRIMARY — Event ID 4732 (Added to Local Group)",
+    EventCode=1,    "SYSMON — net.exe /ADD command detected",
+    "Unknown"
+  )
+
+| eval risk_score=case(
+    EventCode=4732 AND match(GroupName, "(?i)administrators"), 98,
+    EventCode=4720, 90,
+    EventCode=4732, 85,
+    match(CommandLine, "(?i)localgroup.*administrators"), 95,
+    match(ParentImage, "(?i)(powershell|wscript|mshta|cscript)"), 90,
+    EventCode=1, 80,
+    60
+  )
+
+| eval action_summary=case(
+    EventCode=4720, "User Created: " + TargetUserName,
+    EventCode=4732, "User Added to Group: " + TargetUserName + " → " + GroupName,
+    EventCode=1,    "Command: " + CommandLine,
+    "N/A"
+  )
+
+| eval admin_escalation=if(
+    match(coalesce(GroupName, CommandLine), "(?i)(administrators|admin)"),
+    "YES - PRIVILEGE ESCALATION RISK", "No"
+  )
+
+| table _time, ComputerName, SubjectUserName, detection_method,
+         action_summary, admin_escalation, risk_score
+
+| sort - risk_score
+
+| Comment "========================================================"
+| Comment "FROM THE LAB — CONFIRMED MALICIOUS (2024-04-13 12:14:06):"
+| Comment "  Command: net user ropert Rop@2345 /ADD"
+| Comment "  Parent:  cmd.exe"
+| Comment "  User:    DESKTOP-0U8V16R\user"
+| Comment "  IntegrityLevel: High"
+| Comment "  New account 'ropert' created with password Rop@2345"
+| Comment ""
+| Comment "RISK SCORE GUIDE:"
+| Comment "  98 = User added to Administrators (privilege escalation confirmed)"
+| Comment "  95 = localgroup administrators /add in CommandLine"
+| Comment "  90 = Event ID 4720 (user account created)"
+| Comment "  90 = Script host parent (powershell/mshta/wscript)"
+| Comment "  85 = Event ID 4732 (added to local group)"
+| Comment "  80 = net.exe /add detected via Sysmon"
+| Comment ""
+| Comment "RED FLAGS FROM INVESTIGATION:"
+| Comment "  - Standard user (not SYSTEM/Admin) creating accounts"
+| Comment "  - Generic or random username (ropert, admin1, backup)"
+| Comment "  - Password in CommandLine (plaintext credential exposure)"
+| Comment "  - High IntegrityLevel without matching change ticket"
+| Comment "  - Created outside business hours"
+| Comment ""
+| Comment "IMMEDIATE ACTIONS:"
+| Comment "  1. Disable the new account: net user [username] /active:no"
+| Comment "  2. Check if account was added to Administrators group"
+| Comment "  3. Check for RDP/logon activity from this new account"
+| Comment "  4. Trace parent process back to initial access vector"
+| Comment "  5. Rotate credentials for the creating user account"
+| Comment "========================================================"

@@ -1,0 +1,83 @@
+title: Service Creation via sc.exe - Sysmon Fallback Detection
+id: 00000028-0000-0000-0001-000000000028
+status: production
+description: |
+  Fallback detection for service creation when Event ID 4697 auditing is disabled.
+  Detects sc.exe executions containing 'create' in the CommandLine.
+
+  From lab: sc create Rock binPath=.\Example8.exe (Sysmon Event 1, 05:32:33)
+  Confirmed by 4697 27 seconds later (05:33:00) — both fire on same attack.
+
+  Why not just hunt sc.exe alone? Too many FPs — sc query/stop/start/config are
+  all legitimate. The 'create' parameter specifically identifies service registration.
+
+  Detection Engineering Principle: Primary = 4697, Fallback = sc.exe create.
+  Both detect the same behavior from different telemetry sources.
+
+author: Solomon James
+date: 2026/06/15
+modified: 2026/06/15
+
+references:
+  - https://attack.mitre.org/techniques/T1543/003/
+
+tags:
+  - attack.persistence
+  - attack.t1543.003
+  - attack.privilege_escalation
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  # FALLBACK: sc.exe with create parameter (Sysmon Event ID 1)
+  selection_sc_create:
+    EventID: 1
+    Image|endswith: '\sc.exe'
+    CommandLine|contains: 'create'
+
+  # HIGH-RISK: Service created by script host parents
+  # From lab: cmd.exe → sc.exe create Rock
+  selection_suspicious_parent:
+    EventID: 1
+    Image|endswith: '\sc.exe'
+    CommandLine|contains: 'create'
+    ParentImage|endswith:
+      - '\powershell.exe'
+      - '\cmd.exe'
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+      - '\python.exe'
+
+  # HIGH-RISK: Service payload in writable locations
+  selection_suspicious_payload:
+    EventID: 1
+    Image|endswith: '\sc.exe'
+    CommandLine|contains|all:
+      - 'create'
+    CommandLine|contains:
+      - 'ProgramData'
+      - 'AppData'
+      - 'Temp'
+      - 'Downloads'
+      - 'Users\Public'
+
+  condition: selection_suspicious_parent or selection_suspicious_payload or selection_sc_create
+
+falsepositives:
+  - Windows administrative tools using sc.exe (whitelist by ParentImage + known service names)
+  - Software installers (validate CommandLine against known product service names)
+  - IT scripts for service management (document and suppress by hostname or user)
+
+level: high
+
+fields:
+  - Image
+  - CommandLine
+  - ParentImage
+  - ParentCommandLine
+  - User
+  - IntegrityLevel
+  - ComputerName

@@ -1,0 +1,98 @@
+// ================================================================
+// DETECTION: Suspicious Windows Service Creation
+// RULE ID:   28
+// MITRE:     T1543.003
+// TACTICS:   Persistence | Privilege Escalation
+// SEVERITY:  HIGH
+// DATA:      DeviceEvents (MDE) + SecurityEvent
+// ================================================================
+
+// ----------------------------------------------------------------
+// PRIMARY: Security Event ID 4697 - Service Successfully Installed
+// Requires: Audit Security System Extension enabled
+// ----------------------------------------------------------------
+let ServiceInstalled =
+SecurityEvent
+| where EventID == 4697
+| extend ServiceName_ = tostring(EventData.ServiceName)
+| extend ServiceFileName_ = tostring(EventData.ServiceFileName)
+| extend ServiceAccount_ = tostring(EventData.ServiceAccount)
+| extend ServiceStartType_ = tostring(EventData.ServiceStartType)
+| extend RiskScore = case(
+    ServiceAccount_ =~ "LocalSystem" and
+    ServiceFileName_ has_any ("ProgramData","Temp","AppData","Downloads"), 98,
+    ServiceAccount_ =~ "LocalSystem",                                       92,
+    ServiceFileName_ has_any ("ProgramData","Temp","AppData","Downloads"),  90,
+    85)
+| extend PayloadRisk = iff(
+    ServiceFileName_ has_any ("ProgramData","Temp","AppData","Downloads","Public"),
+    "HIGH - Writable location", "Review required")
+| extend DetectionMethod = "Event ID 4697 - Service Successfully Installed"
+| project TimeGenerated, Computer, TargetUserName, DetectionMethod,
+    ServiceName_, ServiceFileName_, ServiceAccount_, ServiceStartType_,
+    PayloadRisk, RiskScore;
+
+// ----------------------------------------------------------------
+// FALLBACK: Sysmon/MDE - sc.exe with create parameter
+// Fires even when 4697 auditing is disabled
+// From lab: sc create Rock binPath=.\Example8.exe (05:32:33)
+// ----------------------------------------------------------------
+let SCExeCreate =
+DeviceProcessEvents
+| where FileName =~ "sc.exe"
+| where ProcessCommandLine has "create"
+| extend RiskScore = case(
+    InitiatingProcessFileName in~ ("powershell.exe","wscript.exe","mshta.exe","cscript.exe")
+        and ProcessCommandLine has_any ("ProgramData","Temp","AppData","Downloads"), 95,
+    InitiatingProcessFileName in~ ("powershell.exe","wscript.exe","mshta.exe","cscript.exe"), 90,
+    ProcessCommandLine has_any ("ProgramData","Temp","AppData","Downloads"),             88,
+    75)
+| extend PayloadRisk = iff(
+    ProcessCommandLine has_any ("ProgramData","Temp","AppData","Downloads"),
+    "HIGH - Writable location", "Review CommandLine")
+| extend DetectionMethod = "Sysmon Fallback - sc.exe create (attempt)"
+| extend ServiceName_ = "See CommandLine", ServiceFileName_ = ProcessCommandLine,
+    ServiceAccount_ = "Pending 4697 confirmation", ServiceStartType_ = "Unknown"
+| project TimeGenerated = TimeGenerated, Computer = DeviceName,
+    TargetUserName = AccountName, DetectionMethod,
+    ServiceName_, ServiceFileName_, ServiceAccount_, ServiceStartType_,
+    PayloadRisk, RiskScore;
+
+// ----------------------------------------------------------------
+// UNIFIED OUTPUT: Primary + Fallback
+// ----------------------------------------------------------------
+ServiceInstalled
+| union SCExeCreate
+| sort by RiskScore desc, TimeGenerated desc
+
+// ================================================================
+// FROM THE LAB — CONFIRMED MALICIOUS (2024-04-09):
+//
+//   05:32:33 — Sysmon Event 1 (FALLBACK fires):
+//     sc create Rock binPath=.\Example8.exe
+//     Parent: cmd.exe | User: user | IntegrityLevel: High
+//
+//   05:33:00 — Security Event 4697 (PRIMARY fires, 27s later):
+//     ServiceName: Rock
+//     ServiceFileName: .\Example8.exe
+//     ServiceAccount: LocalSystem
+//     SubjectUserName: user
+//
+//   Also: sc create loky binPath=.\Example8.exe (2024-04-08)
+//
+// DEFENSE-IN-DEPTH:
+//   If 4697 auditing OFF → sc.exe fallback still fires
+//   If Sysmon disabled   → 4697 still fires
+//   Both fire 27s apart  → analyst sees full creation + confirmation
+//
+// RESPONSE MATRIX:
+//   RiskScore 98  → Isolate host, disable service, sandbox payload
+//   PayloadRisk=HIGH → Hash executable, submit to threat intel
+//   ServiceAccount=LocalSystem → SYSTEM-level persistence confirmed
+//   Standard user creator → Trace back to initial access vector
+//
+// FOLLOW-ON HUNTS:
+//   Service execution: SecurityEvent | where EventID == 7045 (System log)
+//   Payload file:      DeviceFileEvents | where FolderPath has "ProgramData"
+//   Lateral movement:  IdentityLogonEvents | where AccountUpn == "<user>"
+// ================================================================

@@ -1,0 +1,88 @@
+title: Suspicious Local User Account Creation
+id: 00000029-0000-0000-0000-000000000029
+status: production
+description: |
+  Detects unauthorized local user account creation — a persistence and
+  lateral movement technique used by attackers to maintain access without
+  deploying malware. Covers net.exe /ADD, net1.exe, PowerShell New-LocalUser,
+  and Security Event IDs 4720 (user created) and 4732 (added to local group).
+
+  From lab (2024-04-13 12:14:06):
+  net user ropert Rop@2345 /ADD
+  Parent: cmd.exe | User: DESKTOP-0U8V16R\user | IntegrityLevel: High
+
+  Key red flags: standard user creating accounts, new accounts added to
+  Administrators group, creation outside change management windows,
+  generic or attacker-pattern usernames.
+
+  Business Impact: A backdoor local account bypasses all credential
+  remediation that doesn't include local account auditing. Attackers
+  with a local admin account can return via RDP or lateral tools
+  indefinitely, surviving domain password resets.
+
+author: Solomon James
+date: 2026/06/15
+modified: 2026/06/15
+
+references:
+  - https://attack.mitre.org/techniques/T1136/001/
+  - https://attack.mitre.org/techniques/T1098/
+
+tags:
+  - attack.persistence
+  - attack.t1136.001
+  - attack.privilege_escalation
+  - attack.t1098
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  # PRIMARY: net.exe or net1.exe with /ADD — from lab confirmed malicious
+  selection_net_add:
+    EventID: 1
+    Image|endswith:
+      - '\net.exe'
+      - '\net1.exe'
+    CommandLine|contains|all:
+      - 'user'
+      - '/add'
+
+  # HIGH-RISK: New account added to Administrators group
+  selection_admin_group:
+    EventID: 1
+    Image|endswith:
+      - '\net.exe'
+      - '\net1.exe'
+    CommandLine|contains|all:
+      - 'localgroup'
+      - 'administrators'
+      - '/add'
+
+  # HIGH-RISK: PowerShell account creation
+  selection_powershell_user:
+    EventID: 1
+    Image|endswith: '\powershell.exe'
+    CommandLine|contains:
+      - 'New-LocalUser'
+      - 'Add-LocalGroupMember'
+      - 'net user'
+
+  condition: selection_net_add or selection_admin_group or selection_powershell_user
+
+falsepositives:
+  - IT administrators provisioning accounts during onboarding (validate against ITSM tickets)
+  - Software installers creating service accounts (whitelist by username pattern)
+  - Domain join scripts creating local accounts (whitelist by ParentImage + known script path)
+
+level: high
+
+fields:
+  - Image
+  - CommandLine
+  - ParentImage
+  - ParentCommandLine
+  - User
+  - IntegrityLevel
+  - ComputerName

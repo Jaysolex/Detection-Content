@@ -1,0 +1,94 @@
+// ================================================================
+// DETECTION: Suspicious Local User Account Creation
+// RULE ID:   29
+// MITRE:     T1136.001 | T1098
+// TACTICS:   Persistence | Privilege Escalation
+// SEVERITY:  HIGH
+// DATA:      DeviceProcessEvents (MDE) + SecurityEvent
+// ================================================================
+
+// ----------------------------------------------------------------
+// PRIMARY: Security Event ID 4720 (User Created) + 4732 (Added to Group)
+// ----------------------------------------------------------------
+let UserCreationEvents =
+SecurityEvent
+| where EventID in (4720, 4732)
+| extend ActionType_ = case(
+    EventID == 4720, "User Account Created",
+    EventID == 4732, "User Added to Local Group",
+    "Unknown")
+| extend RiskScore = case(
+    EventID == 4732 and GroupName has_any ("Administrators","Admin"), 98,
+    EventID == 4720, 90,
+    EventID == 4732, 85,
+    60)
+| extend AdminEscalation = iff(
+    GroupName has_any ("Administrators","Admin"),
+    "YES - PRIVILEGE ESCALATION", "No")
+| project TimeGenerated, Computer, SubjectUserName, TargetUserName,
+    ActionType_, GroupName, AdminEscalation, RiskScore,
+    DetectionMethod = "Security Event 4720/4732";
+
+// ----------------------------------------------------------------
+// FALLBACK: Sysmon/MDE - net.exe /add command
+// From lab: net user ropert Rop@2345 /ADD (2024-04-13 12:14:06)
+// ----------------------------------------------------------------
+let NetUserAdd =
+DeviceProcessEvents
+| where FileName in~ ("net.exe", "net1.exe")
+| where ProcessCommandLine has "user" and ProcessCommandLine has_any ("/add", "/ADD")
+| extend RiskScore = case(
+    ProcessCommandLine has_any ("administrators","localgroup") and
+    ProcessCommandLine has_any ("/add","/ADD"),                      98,
+    InitiatingProcessFileName in~ ("powershell.exe","mshta.exe",
+        "wscript.exe","cscript.exe"),                                92,
+    85)
+| extend AdminEscalation = iff(
+    ProcessCommandLine has_any ("administrators","localgroup"),
+    "YES - PRIVILEGE ESCALATION", "No")
+| extend ActionType_ = "net user /ADD (command detected)"
+| extend TargetUserName = extract(@"net user (\S+)", 1, ProcessCommandLine)
+| project TimeGenerated, Computer = DeviceName,
+    SubjectUserName = AccountName, TargetUserName,
+    ActionType_, GroupName = "See CommandLine",
+    AdminEscalation, RiskScore,
+    DetectionMethod = strcat("Sysmon Fallback - Parent: ", InitiatingProcessFileName);
+
+// ----------------------------------------------------------------
+// UNIFIED OUTPUT
+// ----------------------------------------------------------------
+UserCreationEvents
+| union NetUserAdd
+| sort by RiskScore desc, TimeGenerated desc
+
+// ================================================================
+// FROM THE LAB — CONFIRMED MALICIOUS (2024-04-13 12:14:06):
+//
+//   Command:        net user ropert Rop@2345 /ADD
+//   Parent:         cmd.exe
+//   User:           DESKTOP-0U8V16R\user
+//   IntegrityLevel: High
+//   New account:    ropert (password in plaintext in CommandLine)
+//
+// RED FLAGS IDENTIFIED:
+//   - Standard user account creating another user
+//   - High integrity without expected admin context
+//   - Random/unusual username (ropert)
+//   - Password visible in CommandLine (credential exposure)
+//
+// RISK SCORE GUIDE:
+//   98 = Added to Administrators group (escalation confirmed)
+//   92 = Script host parent (powershell/mshta/wscript)
+//   90 = Event ID 4720 (user account created — native Windows)
+//   85 = net.exe /add detected via Sysmon
+//
+// RESPONSE MATRIX:
+//   AdminEscalation=YES → Disable account AND remove from Administrators NOW
+//   RiskScore >= 90     → Investigate creating user's full session
+//   TargetUserName unknown → Check if account used for RDP/lateral movement
+//
+// FOLLOW-ON HUNTS:
+//   Logon activity:  SecurityEvent | where EventID == 4624 and TargetUserName == "<new user>"
+//   RDP sessions:    SecurityEvent | where EventID == 4648 and SubjectUserName == "<new user>"
+//   Group changes:   SecurityEvent | where EventID == 4732 and TargetUserName == "<new user>"
+// ================================================================

@@ -1,0 +1,86 @@
+| Comment "========================================================"
+| Comment "DETECTION: Suspicious Windows Service Creation"
+| Comment "RULE ID:   28"
+| Comment "MITRE:     T1543.003"
+| Comment "TACTICS:   Persistence | Privilege Escalation"
+| Comment "SEVERITY:  HIGH"
+| Comment "DATA SOURCE: Security Log (Event ID 4697) + Sysmon Event ID 1"
+| Comment "========================================================"
+
+| Comment "--- PRIMARY: Event ID 4697 - Service Successfully Installed ---"
+| Comment "Requires: Audit Security System Extension enabled"
+
+(index=main sourcetype=XmlWinEventLog:Security EventCode=4697)
+OR
+(index=main sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+    EventCode=1 Image="*\\sc.exe" CommandLine="*create*")
+
+| eval detection_method=case(
+    EventCode=4697, "PRIMARY — Event ID 4697 (Service Installed)",
+    EventCode=1,    "FALLBACK — Sysmon sc.exe create",
+    "Unknown"
+  )
+
+| eval risk_score=case(
+    EventCode=4697 AND match(ServiceAccount, "(?i)localsystem"),     98,
+    EventCode=4697 AND match(ServiceFileName, "(?i)(programdata|temp|appdata|downloads)"), 95,
+    EventCode=4697,                                                   85,
+    match(ParentImage, "(?i)(powershell|wscript|cscript|mshta)") AND EventCode=1, 92,
+    match(CommandLine, "(?i)(programdata|temp|appdata|downloads)") AND EventCode=1, 90,
+    EventCode=1,                                                      75,
+    60
+  )
+
+| eval service_info=case(
+    EventCode=4697, ServiceName + " → " + ServiceFileName + " (Account: " + ServiceAccount + ")",
+    EventCode=1,    CommandLine,
+    "N/A"
+  )
+
+| eval payload_risk=case(
+    match(coalesce(ServiceFileName, CommandLine), "(?i)(programdata|temp|appdata|downloads|public)"),
+    "HIGH - Writable location",
+    match(coalesce(ServiceFileName, CommandLine), "(?i)(windows\\system32|program files)"),
+    "Low - System path",
+    "Review required"
+  )
+
+| table _time, ComputerName, detection_method, service_info,
+         SubjectUserName, payload_risk, risk_score
+
+| sort - risk_score
+
+| Comment "========================================================"
+| Comment "FROM THE LAB — CONFIRMED MALICIOUS (2024-04-09):"
+| Comment "  05:32:33 Sysmon Event 1:"
+| Comment "    sc create Rock binPath=.\Example8.exe"
+| Comment "    Parent: cmd.exe | User: user | IntegrityLevel: High"
+| Comment ""
+| Comment "  05:33:00 Security Event 4697 (27 seconds later):"
+| Comment "    ServiceName: Rock"
+| Comment "    ServiceFileName: .\Example8.exe"
+| Comment "    ServiceAccount: LocalSystem"
+| Comment "    SubjectUserName: user"
+| Comment ""
+| Comment "  Also detected: sc create loky binPath=.\Example8.exe (2024-04-08)"
+| Comment ""
+| Comment "RISK SCORE GUIDE:"
+| Comment "  98 = 4697 + LocalSystem account (highest privilege persistence)"
+| Comment "  95 = 4697 + payload in writable path"
+| Comment "  92 = sc.exe from script host parent"
+| Comment "  85 = Any 4697 event (service confirmed installed)"
+| Comment "  75 = sc.exe create detected (attempt, not yet confirmed)"
+| Comment ""
+| Comment "DETECTION PRINCIPLE:"
+| Comment "  4697 = Service successfully INSTALLED"
+| Comment "  sc.exe create = Service creation ATTEMPTED"
+| Comment "  Both fire on same attack ~27 seconds apart"
+| Comment "  If 4697 auditing is OFF, Sysmon still catches it"
+| Comment ""
+| Comment "IMMEDIATE ACTIONS:"
+| Comment "  1. What is the service name? Is it known?"
+| Comment "  2. What executable does it run? Hash it + sandbox"
+| Comment "  3. Who created it? Standard user creating services = red flag"
+| Comment "  4. What privilege? LocalSystem = highest local privilege"
+| Comment "  5. Disable the service: sc stop [name] && sc delete [name]"
+| Comment "========================================================"

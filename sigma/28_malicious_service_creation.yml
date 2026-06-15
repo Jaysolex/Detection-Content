@@ -1,0 +1,57 @@
+title: Suspicious Windows Service Creation
+id: 00000028-0000-0000-0000-000000000028
+status: production
+description: |
+  Detects malicious Windows service creation via two independent methods:
+  PRIMARY: Security Event ID 4697 (A service was installed in the system)
+  FALLBACK: Sysmon Event ID 1 — sc.exe with 'create' in CommandLine
+
+  From lab (2024-04-09): Service "Rock" created by standard user via cmd.exe,
+  running Example8.exe as LocalSystem. Also detected: service "loky" (2024-04-08).
+  Both detected 27 seconds apart via Sysmon (attempt) + 4697 (confirmation).
+
+  Business Impact: Services provide continuous persistence — they start on boot,
+  run as SYSTEM, and survive reboots. Without this detection, service-based
+  persistence is typically only found during post-incident forensics.
+
+  Detection Engineering Principle: Never depend on a single log source.
+  If 4697 auditing is disabled, sc.exe + Sysmon provides the fallback.
+
+author: Solomon James
+date: 2026/06/15
+modified: 2026/06/15
+
+references:
+  - https://attack.mitre.org/techniques/T1543/003/
+
+tags:
+  - attack.persistence
+  - attack.t1543.003
+  - attack.privilege_escalation
+
+logsource:
+  product: windows
+  service: security
+
+detection:
+  # PRIMARY: Service successfully installed (requires Audit Security System Extension)
+  selection_4697:
+    EventID: 4697
+
+  condition: selection_4697
+
+falsepositives:
+  - Legitimate software installers registering services (whitelist by ServiceFileName path)
+  - IT administration creating known services (validate against change management)
+  - Antivirus and security tool installation (whitelist by ServiceName + vendor path)
+
+level: high
+
+fields:
+  - ServiceName
+  - ServiceFileName
+  - ServiceType
+  - ServiceStartType
+  - ServiceAccount
+  - SubjectUserName
+  - SubjectLogonId
